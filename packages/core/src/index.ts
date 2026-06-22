@@ -14,7 +14,7 @@ export type { ResolvedOptions } from './config.js';
 
 export { getContext, getContextOrThrow, withTags, withContext, runWithContext } from './context.js';
 
-export { on, off, emit, listenerCount } from './events.js';
+export { on, off, emit, listenerCount, _clearAllForTest } from './events.js';
 
 export { startLoopMonitor, eventLoopUtilization, currentEventLoopPhase } from './loop.js';
 
