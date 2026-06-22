@@ -4,9 +4,12 @@ import {
   type ExecutionContext,
   type NestInterceptor,
 } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { tap, catchError, throwError, EMPTY, type Observable } from 'rxjs';
 import type { Core, SerializedError } from '@node-xray/core';
 import { redactHeaders, redactSnapshot } from '@node-xray/core';
+import { getAssetsDir } from '@node-xray/dashboard';
 import type { XRayRequest, XRayResponse } from './types.js';
 import { XRAY_REQUEST_KEY, XRAY_RESPONSE_KEY } from './symbols.js';
 import { XRAY_CORE } from './service.js';
@@ -206,10 +209,11 @@ export class XrayInterceptor implements NestInterceptor {
             );
             setHeader('x-content-type-options', 'nosniff');
             setHeader('referrer-policy', 'no-referrer');
+            const html = loadDashboardHtml(dashboardPath);
             if (res.send) {
-              res.send(DASHBOARD_HTML.replace(/__PATH__/g, encodeURI(dashboardPath)));
+              res.send(html);
             } else {
-              res.end?.(DASHBOARD_HTML.replace(/__PATH__/g, encodeURI(dashboardPath)));
+              res.end?.(html);
             }
             // Neutralize further header writes and end() so the
             // core's appended listener (added by `core.mount()`)
@@ -221,7 +225,7 @@ export class XrayInterceptor implements NestInterceptor {
         }
 
         try {
-          this.core.mount(server);
+          this.core.mount(server, { assetsDir: getAssetsDir() });
           coreRef[SERVER_LOCK] = true;
         } catch (err) {
           this.core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -324,20 +328,6 @@ function serializeError(err: unknown): SerializedError {
   return { name: 'Error', message: String(err) };
 }
 
-const DASHBOARD_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>node-xray</title>
-    <meta http-equiv="refresh" content="0; url=__PATH__/" />
-  </head>
-  <body>
-    <p>node-xray dashboard. Redirecting to <a href="__PATH__/">the dashboard</a>.</p>
-  </body>
-</html>
-`;
-
 type DashboardResponse = XRayResponse & {
   statusCode: number;
   setHeader?: (name: string, value: string) => void;
@@ -346,8 +336,23 @@ type DashboardResponse = XRayResponse & {
   send?: (body?: string) => void;
 };
 
+let cachedIndexHtml: string | null = null;
+function loadDashboardHtml(dashboardPath: string): string {
+  if (cachedIndexHtml !== null) return cachedIndexHtml;
+  try {
+    const raw = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    cachedIndexHtml = raw
+      .replace(/__STYLES__/g, encodeURI(`${dashboardPath}/styles.css`))
+      .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
+    return cachedIndexHtml;
+  } catch {
+    cachedIndexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+    return cachedIndexHtml;
+  }
+}
+
 function respondDashboard(response: DashboardResponse, path: string): void {
-  const html = DASHBOARD_HTML.replace(/__PATH__/g, encodeURI(path));
+  const html = loadDashboardHtml(path);
   const setHeader = (name: string, value: string): void => {
     if (response.setHeader) {
       response.setHeader(name, value);
@@ -359,7 +364,7 @@ function respondDashboard(response: DashboardResponse, path: string): void {
   setHeader('cache-control', 'no-cache');
   setHeader(
     'content-security-policy',
-    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'",
+    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'",
   );
   setHeader('x-content-type-options', 'nosniff');
   setHeader('referrer-policy', 'no-referrer');

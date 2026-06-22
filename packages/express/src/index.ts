@@ -1,10 +1,34 @@
 import type { Server as HttpServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
 import type { XRayOptions, SnapshotSide } from '@node-xray/types';
 import { createCore, redactHeaders, type Core, type SerializedError } from '@node-xray/core';
+import { getAssetsDir } from '@node-xray/dashboard';
 
 const RECORD_ON_REQ = Symbol.for('@node-xray/express.record');
 const RESPONSE_BODY_FLAG = Symbol.for('@node-xray/express.response-body');
+
+/**
+ * Cached dashboard assets. Loaded once on first request, then served
+ * from memory. The assets are shipped by `@node-xray/dashboard`; we
+ * resolve the directory through the public `getAssetsDir()` helper.
+ */
+let cachedIndexHtml: string | null = null;
+function loadIndexHtml(path: string): string {
+  if (cachedIndexHtml !== null) return cachedIndexHtml;
+  try {
+    const html = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    cachedIndexHtml = html
+      .replace(/__STYLES__/g, encodeURI(`${path}/styles.css`))
+      .replace(/__APP__/g, encodeURI(`${path}/app.js`));
+    return cachedIndexHtml;
+  } catch {
+    // Dashboard package not installed; fall back to a minimal page.
+    cachedIndexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+    return cachedIndexHtml;
+  }
+}
 
 /**
  * Public return value of `xray()`. The `RequestHandler` is what
@@ -92,7 +116,7 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     }
     mountTarget = server;
     try {
-      core.mount(server);
+      core.mount(server, { assetsDir: getAssetsDir() });
       dashboardMounted = true;
     } catch (err) {
       core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -106,10 +130,15 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
   ): void {
     // 1. Serve the dashboard HTML if the path matches. This is done
     //    here (and not in the http.Server's 'request' listener) so
-    //    we run before Express's 404 handler.
+    //    we run before Express's 404 handler. The HTML is read from
+    //    `@node-xray/dashboard`'s `assets/` directory on first hit.
     const dashboardPath = core.options.path;
     if (req.path === dashboardPath || req.path === `${dashboardPath}/`) {
-      serveDashboardHtml(res, dashboardPath);
+      const html = loadIndexHtml(dashboardPath);
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      res.setHeader('cache-control', 'no-cache');
+      res.statusCode = 200;
+      res.end(html);
       return;
     }
     if (req.path === `${dashboardPath}/ws`) {
@@ -411,34 +440,6 @@ function generateRequestId(): string {
     .toString(36)
     .padStart(4, '0');
   return `req_${time}${counter}${rand}`;
-}
-
-const DASHBOARD_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>node-xray</title>
-    <meta http-equiv="refresh" content="0; url=__PATH__/" />
-  </head>
-  <body>
-    <p>node-xray dashboard. Open <a href="__PATH__/">the dashboard</a>.</p>
-  </body>
-</html>
-`;
-
-function serveDashboardHtml(res: Response, path: string): void {
-  const html = DASHBOARD_HTML.replace(/__PATH__/g, encodeURI(path));
-  res.setHeader(
-    'content-security-policy',
-    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'",
-  );
-  res.setHeader('x-content-type-options', 'nosniff');
-  res.setHeader('referrer-policy', 'no-referrer');
-  res.setHeader('content-type', 'text/html; charset=utf-8');
-  res.setHeader('cache-control', 'no-cache');
-  res.statusCode = 200;
-  res.end(html);
 }
 
 function serializeError(err: unknown): SerializedError {

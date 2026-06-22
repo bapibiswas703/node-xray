@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@node-xray/types': resolve(__dirname, '../types/src/index.ts'),
       '@node-xray/core': resolve(__dirname, '../core/src/index.ts'),
+      '@node-xray/dashboard': resolve(__dirname, '../dashboard/src/index.ts'),
     },
   },
   test: {
