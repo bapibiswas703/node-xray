@@ -307,9 +307,7 @@ function wrapResponse(
         const asString = buf.toString('utf-8');
         // eslint-disable-next-line no-control-regex
         const isText = /^[\x09\x0a\x0d\x20-\x7e\u00a0-\uffff]*$/.test(asString);
-        response.body = isText
-          ? asString
-          : { __binary: true, base64: buf.toString('base64') };
+        response.body = isText ? asString : { __binary: true, base64: buf.toString('base64') };
       }
     }
 
