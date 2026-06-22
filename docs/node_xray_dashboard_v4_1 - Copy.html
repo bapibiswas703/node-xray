@@ -1,0 +1,2387 @@
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  .xr {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #1e2235;
+    background: #0d0f1a;
+    color: #e2e8f0;
+  }
+  .topbar {
+    background: #111320;
+    border-bottom: 1px solid #1e2235;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+  .logo {
+    font-size: 13px;
+    font-weight: 600;
+    color: #a78bfa;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sep {
+    color: #2d3454;
+    margin: 0 2px;
+  }
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: blink 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .tb-right {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 10px;
+    color: #4b5680;
+  }
+  .tb-val {
+    color: #a5b4fc;
+  }
+  .tb-ok {
+    color: #22c55e;
+  }
+  .pill {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 500;
+  }
+  .pill-live {
+    background: #0c2215;
+    color: #34d399;
+    border: 0.5px solid #166534;
+  }
+  .body-split {
+    display: grid;
+    grid-template-columns: 168px 1fr;
+    min-height: 0;
+  }
+  .sidebar {
+    border-right: 1px solid #1e2235;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .s-hdr {
+    font-size: 9px;
+    color: #3d4466;
+    padding: 7px 10px 4px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 0.5px solid #181b2c;
+  }
+  .rq-item {
+    padding: 6px 10px;
+    border-bottom: 0.5px solid #181b2c;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-left: 2px solid transparent;
+  }
+  .rq-item:hover {
+    background: #13162a;
+  }
+  .rq-item.active {
+    background: #161a2e;
+    border-left-color: #7c3aed;
+  }
+  .rq-top {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .bg {
+    background: #0c2215;
+    color: #34d399;
+  }
+  .bp {
+    background: #1c1500;
+    color: #fbbf24;
+  }
+  .bu {
+    background: #0a1830;
+    color: #60a5fa;
+  }
+  .bd {
+    background: #1f0a0a;
+    color: #f87171;
+  }
+  .rq-path {
+    font-size: 11px;
+    color: #c4cde8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+  }
+  .rq-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    font-size: 9px;
+    color: #3d4466;
+  }
+  .s-ok {
+    color: #34d399;
+  }
+  .s-err {
+    color: #f87171;
+  }
+  .s-pend {
+    color: #fbbf24;
+  }
+  .filter-bar {
+    padding: 5px 8px;
+    border-bottom: 0.5px solid #181b2c;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .fb {
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 9px;
+    background: transparent;
+    border: 0.5px solid #1e2235;
+    color: #3d4466;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.12s;
+  }
+  .fb:hover {
+    color: #a5b4fc;
+    border-color: #4338ca;
+  }
+  .fb.on {
+    background: #1a1535;
+    color: #a5b4fc;
+    border-color: #4338ca;
+  }
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid #1e2235;
+    background: #0d0f1a;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 7px 14px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #4b5680;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .tab:hover {
+    color: #94a3b8;
+  }
+  .tab.on {
+    color: #a78bfa;
+    border-bottom-color: #7c3aed;
+  }
+
+  .tab-content {
+    display: none;
+    flex-direction: column;
+  }
+  .tab-content.on {
+    display: flex;
+  }
+
+  .panels-top {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 10px 5px;
+  }
+  .panel {
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .p-hdr {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 6px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.05);
+  }
+  .p-body {
+    padding: 8px 9px;
+  }
+  .p-call {
+    border: 1.5px solid #f97316;
+  }
+  .p-call .p-hdr {
+    color: #f97316;
+    background: #120a04;
+  }
+  .p-api {
+    border: 1.5px solid #a855f7;
+  }
+  .p-api .p-hdr {
+    color: #c084fc;
+    background: #0d0820;
+  }
+  .frame {
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    font-size: 10px;
+  }
+  @keyframes fi {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .frame {
+    animation: fi 0.2s ease;
+  }
+  .f0 {
+    background: #1e0f36;
+    border: 0.5px solid #7c3aed;
+    color: #c4b5fd;
+  }
+  .fn {
+    background: #141828;
+    border: 0.5px solid #2d3454;
+    color: #94a3b8;
+  }
+  .fg {
+    background: #0c1f14;
+    border: 0.5px solid #166534;
+    color: #4ade80;
+    font-size: 9px;
+  }
+  .api-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .chip {
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .chip.on {
+    background: #14391e;
+    border: 0.5px solid #22c55e;
+    color: #86efac;
+  }
+  .chip.off {
+    color: #2d3454;
+    background: #0f1220;
+    border: 0.5px solid #1a1f30;
+  }
+  .mid-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    padding: 0 10px 5px;
+  }
+  .el-box {
+    border: 1.5px solid #22d3ee;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 7px 5px;
+    gap: 4px;
+  }
+  .el-lbl {
+    font-size: 8px;
+    color: #22d3ee;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    align-self: stretch;
+  }
+  .ring {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid #22d3ee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .ring.go i {
+    animation: spin 1.4s linear infinite;
+  }
+  .ring i {
+    color: #22d3ee;
+    font-size: 16px;
+  }
+  .el-phase {
+    font-size: 10px;
+    font-weight: 600;
+    color: #67e8f9;
+    text-align: center;
+  }
+  .el-sub {
+    font-size: 8px;
+    color: #2d5566;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .queues {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .q-box {
+    border-radius: 7px;
+    padding: 6px 8px;
+  }
+  .q-macro {
+    border: 1.5px solid #ec4899;
+  }
+  .q-micro {
+    border: 1.5px solid #34d399;
+  }
+  .q-lbl {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .qmc {
+    color: #ec4899;
+  }
+  .qmi {
+    color: #34d399;
+  }
+  .fifo {
+    font-size: 7px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-weight: 500;
+  }
+  .fmac {
+    background: #1a0520;
+    color: #f0abfc;
+  }
+  .fmic {
+    background: #0c1f14;
+    color: #4ade80;
+  }
+  .qchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    margin: 2px 2px 0 0;
+    animation: fi 0.15s ease;
+  }
+  .qmacro {
+    background: #1c1500;
+    border: 0.5px solid #b45309;
+    color: #fcd34d;
+  }
+  .qmicro {
+    background: #1a0d23;
+    border: 0.5px solid #a855f7;
+    color: #d8b4fe;
+  }
+  .q-empty {
+    color: #2d3454;
+    font-size: 9px;
+    font-style: italic;
+  }
+  .tl-sec {
+    padding: 0 10px 5px;
+  }
+  .tl-hdr {
+    font-size: 9px;
+    color: #3d4466;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .tl-track {
+    position: relative;
+    padding-left: 12px;
+  }
+  .tl-vline {
+    position: absolute;
+    left: 3px;
+    top: 0;
+    bottom: 0;
+    width: 0.5px;
+    background: #1e2235;
+  }
+  .tl-row {
+    position: relative;
+    display: flex;
+    gap: 0;
+    margin-bottom: 4px;
+    align-items: flex-start;
+  }
+  .tl-dot {
+    position: absolute;
+    left: -12px;
+    top: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .tl-card {
+    background: #141828;
+    border: 0.5px solid #1e2235;
+    border-radius: 5px;
+    padding: 5px 9px;
+    flex: 1;
+    transition: border-color 0.15s;
+  }
+  .tl-card:hover {
+    border-color: #2d3454;
+  }
+  .tl-name {
+    color: #e2e8f0;
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .tl-meta {
+    color: #3d4466;
+    font-size: 9px;
+    margin-top: 1px;
+  }
+  .tl-ts {
+    font-size: 9px;
+    color: #2d3454;
+    min-width: 30px;
+    text-align: right;
+    padding-top: 5px;
+    padding-left: 6px;
+    flex-shrink: 0;
+  }
+  .async-sec {
+    padding: 0 10px 5px;
+  }
+  .async-hdr {
+    font-size: 9px;
+    color: #3d4466;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .async-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  .async-card {
+    background: #141828;
+    border: 0.5px solid #1e2235;
+    border-radius: 7px;
+    padding: 7px 9px;
+    transition: border-color 0.15s;
+  }
+  .async-card:hover {
+    border-color: #2d3454;
+  }
+  .async-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+  }
+  .async-name {
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .async-stat {
+    font-size: 9px;
+  }
+  .async-dur {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e2e8f0;
+    margin: 2px 0 1px;
+  }
+  .async-dur.dim {
+    color: #2d3454;
+  }
+  .async-q {
+    font-size: 8px;
+    color: #3d4466;
+    margin-bottom: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bar-track {
+    height: 2px;
+    background: #1e2235;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+  .waterfall-sec {
+    padding: 0 10px 5px;
+  }
+  .waterfall-hdr {
+    font-size: 9px;
+    color: #3d4466;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .wf-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .wf-lbl {
+    font-size: 9px;
+    color: #94a3b8;
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+  .wf-track {
+    flex: 1;
+    height: 8px;
+    background: #1e2235;
+    border-radius: 3px;
+    overflow: visible;
+    position: relative;
+  }
+  .wf-bar {
+    height: 100%;
+    border-radius: 3px;
+    position: absolute;
+    transition: all 0.5s ease;
+  }
+  .wf-ms {
+    font-size: 8px;
+    color: #3d4466;
+    min-width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .threads-row {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .thr {
+    width: 10px;
+    height: 6px;
+    border-radius: 2px;
+    background: #1e2235;
+  }
+  .thr.busy {
+    background: #22d3ee;
+  }
+  .selected-req-label {
+    font-size: 9px;
+    color: #4b5680;
+    padding: 4px 10px;
+    border-bottom: 0.5px solid #181b2c;
+    background: #0d0f1a;
+  }
+  .statbar {
+    display: flex;
+    border-top: 1px solid #1e2235;
+    flex-shrink: 0;
+  }
+  .sc {
+    flex: 1;
+    padding: 6px 8px;
+    border-right: 0.5px solid #1e2235;
+    text-align: center;
+  }
+  .sc:last-child {
+    border-right: none;
+  }
+  .sv {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e2e8f0;
+  }
+  .sl {
+    font-size: 8px;
+    color: #3d4466;
+    margin-top: 1px;
+  }
+  .ctrlbar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 6px 10px;
+    background: #0b0e18;
+    border-top: 1px solid #1e2235;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .cb {
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-family: inherit;
+    cursor: pointer;
+    border: 0.5px solid #2d3454;
+    background: transparent;
+    color: #4b5680;
+    transition: all 0.12s;
+  }
+  .cb:hover {
+    background: #13162a;
+    color: #e2e8f0;
+  }
+  .cb.on {
+    background: #1a1535;
+    color: #a5b4fc;
+    border-color: #4338ca;
+  }
+  .ml {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .flbl {
+    font-size: 9px;
+    color: #3d4466;
+  }
+
+  /* ── Body inspector tab ── */
+  .body-inspector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+  }
+  .bi-panel {
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .bi-req {
+    border: 1.5px solid #38bdf8;
+  }
+  .bi-res {
+    border: 1.5px solid #a3e635;
+  }
+  .bi-hdr {
+    padding: 7px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  }
+  .bi-req .bi-hdr {
+    background: #051420;
+    color: #38bdf8;
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .bi-res .bi-hdr {
+    background: #0c1a04;
+    color: #a3e635;
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .bi-size {
+    font-size: 9px;
+    opacity: 0.6;
+  }
+  .bi-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
+    border-bottom: 0.5px solid #1e2235;
+  }
+  .bi-tag {
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+  .bi-tag-k {
+    background: #0d1f2d;
+    color: #38bdf8;
+    border: 0.5px solid #1e4060;
+  }
+  .bi-tag-v {
+    background: #131a07;
+    color: #a3e635;
+    border: 0.5px solid #2d4010;
+  }
+  .bi-tag-h {
+    background: #1a1535;
+    color: #a78bfa;
+    border: 0.5px solid #2d1f6e;
+  }
+  .bi-tag-e {
+    background: #1f0a0a;
+    color: #f87171;
+    border: 0.5px solid #6b1e1e;
+  }
+  .bi-tag-w {
+    background: #1c1500;
+    color: #fbbf24;
+    border: 0.5px solid #5c4000;
+  }
+  .json-wrap {
+    padding: 8px 10px;
+    font-size: 10px;
+    line-height: 1.7;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 220px;
+  }
+  .j-key {
+    color: #93c5fd;
+  }
+  .j-str {
+    color: #86efac;
+  }
+  .j-num {
+    color: #fbbf24;
+  }
+  .j-bool {
+    color: #f0abfc;
+  }
+  .j-null {
+    color: #94a3b8;
+  }
+  .j-brace {
+    color: #94a3b8;
+  }
+  .copy-btn {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 0.5px solid #1e2235;
+    background: transparent;
+    color: #4b5680;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.12s;
+  }
+  .copy-btn:hover {
+    background: #13162a;
+    color: #e2e8f0;
+  }
+  .copy-btn.copied {
+    color: #34d399;
+    border-color: #166534;
+  }
+  .pending-body {
+    padding: 16px 10px;
+    text-align: center;
+    color: #3d4466;
+    font-size: 10px;
+    font-style: italic;
+  }
+  .no-body {
+    padding: 10px;
+    color: #2d3454;
+    font-size: 9px;
+    font-style: italic;
+  }
+  .status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .sb-ok {
+    background: #0c2215;
+    color: #34d399;
+  }
+  .sb-err {
+    background: #1f0a0a;
+    color: #f87171;
+  }
+  .sb-pend {
+    background: #1c1500;
+    color: #fbbf24;
+  }
+  .headers-toggle {
+    font-size: 9px;
+    color: #4b5680;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 0.5px solid #1e2235;
+    background: transparent;
+    font-family: inherit;
+    transition: all 0.12s;
+  }
+  .headers-toggle:hover {
+    color: #a5b4fc;
+    border-color: #4338ca;
+  }
+  .headers-section {
+    border-bottom: 0.5px solid #1e2235;
+  }
+</style>
+
+<h2 class="sr-only">
+  node-xray live dashboard v4.1 — Node.js runtime inspector with request and response body viewer
+</h2>
+
+<div class="xr">
+  <div class="topbar">
+    <div class="logo">
+      <i class="ti ti-activity" style="font-size: 14px" aria-hidden="true"></i> node-xray
+    </div>
+    <span class="sep">|</span>
+    <div class="live-dot"></div>
+    <span style="font-size: 10px; color: #4b5680">localhost:3000</span>
+    <div class="tb-right">
+      <span>reqs: <span class="tb-val" id="rc">12</span></span>
+      <span>avg: <span class="tb-val" id="avgms">34ms</span></span>
+      <span>loop lag: <span class="tb-ok" id="llg">0.3ms</span></span>
+      <span class="pill pill-live">● live</span>
+    </div>
+  </div>
+
+  <div class="body-split">
+    <div class="sidebar">
+      <div class="s-hdr">requests</div>
+      <div class="filter-bar">
+        <button class="fb on" onclick="setFilter('all', this)">all</button>
+        <button class="fb" onclick="setFilter('2xx', this)">2xx</button>
+        <button class="fb" onclick="setFilter('err', this)">err</button>
+        <button class="fb" onclick="setFilter('slow', this)">&gt;50ms</button>
+      </div>
+      <div id="req-list"></div>
+    </div>
+
+    <div class="main">
+      <div class="selected-req-label" id="sel-lbl">● GET /api/users — 200 OK — 42ms</div>
+
+      <div class="tab-bar">
+        <div class="tab on" onclick="switchTab('runtime', this)">Runtime</div>
+        <div class="tab" onclick="switchTab('bodies', this)">
+          <i class="ti ti-braces" style="font-size: 11px; margin-right: 3px" aria-hidden="true"></i
+          >Request / Response
+        </div>
+      </div>
+
+      <!-- RUNTIME TAB -->
+      <div class="tab-content on" id="tab-runtime">
+        <div class="panels-top">
+          <div class="panel p-call">
+            <div class="p-hdr">
+              Call stack
+              <span
+                style="
+                  font-size: 8px;
+                  background: #1e0f36;
+                  color: #c4b5fd;
+                  padding: 1px 6px;
+                  border-radius: 8px;
+                "
+                >LIFO</span
+              >
+            </div>
+            <div class="p-body" id="stack-panel"></div>
+          </div>
+          <div class="panel p-api">
+            <div class="p-hdr">
+              Node APIs — libuv
+              <span style="font-size: 9px; color: #7c3aed" id="thread-lbl">1/4 threads</span>
+            </div>
+            <div class="p-body">
+              <div class="api-chips" id="api-panel"></div>
+              <div class="threads-row" id="thread-viz" style="margin-top: 7px"></div>
+              <div style="font-size: 8px; color: #3d4466; margin-top: 3px" id="thread-sub"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mid-row">
+          <div class="el-box" id="loop-box">
+            <div class="el-lbl">Event Loop</div>
+            <div class="ring go" id="loop-ring">
+              <i class="ti ti-refresh" aria-hidden="true"></i>
+            </div>
+            <div class="el-phase" id="lp-name">poll</div>
+            <div class="el-sub" id="lp-sub">I/O wait</div>
+          </div>
+          <div class="queues">
+            <div class="q-box q-macro">
+              <div class="q-lbl qmc">
+                Task queue (macrotask) <span class="fifo fmac">FIFO</span>
+              </div>
+              <div id="tq-body"></div>
+            </div>
+            <div class="q-box q-micro">
+              <div class="q-lbl qmi">Microtask queue <span class="fifo fmic">FIFO</span></div>
+              <div id="mq-body"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="waterfall-sec">
+          <div class="waterfall-hdr">async waterfall</div>
+          <div id="waterfall"></div>
+        </div>
+
+        <div class="tl-sec">
+          <div class="tl-hdr" id="tl-hdr">request timeline</div>
+          <div class="tl-track">
+            <div class="tl-vline"></div>
+            <div id="tl-body"></div>
+          </div>
+        </div>
+
+        <div class="async-sec">
+          <div class="async-hdr">async operations</div>
+          <div class="async-grid" id="async-grid"></div>
+        </div>
+      </div>
+
+      <!-- BODY TAB -->
+      <div class="tab-content" id="tab-bodies">
+        <div class="body-inspector">
+          <!-- Request panel -->
+          <div class="bi-panel bi-req">
+            <div class="bi-hdr">
+              <span
+                ><i
+                  class="ti ti-arrow-up"
+                  style="font-size: 11px; margin-right: 4px"
+                  aria-hidden="true"
+                ></i
+                >Request body</span
+              >
+              <div style="display: flex; gap: 6px; align-items: center">
+                <span class="bi-size" id="req-size"></span>
+                <button class="copy-btn" onclick="copyJSON('req-json-raw', 'copy-req')">
+                  copy
+                </button>
+              </div>
+            </div>
+            <div class="bi-meta" id="req-meta"></div>
+            <div class="headers-section">
+              <div
+                style="
+                  padding: 4px 10px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <span
+                  style="
+                    font-size: 9px;
+                    color: #3d4466;
+                    letter-spacing: 0.06em;
+                    text-transform: uppercase;
+                  "
+                  >Headers</span
+                >
+                <button class="headers-toggle" onclick="toggleHeaders('req-headers')">show</button>
+              </div>
+              <div id="req-headers" style="display: none; padding: 0 10px 6px"></div>
+            </div>
+            <div class="json-wrap" id="req-json-display"></div>
+            <span id="req-json-raw" style="display: none"></span>
+            <span id="copy-req"></span>
+          </div>
+
+          <!-- Response panel -->
+          <div class="bi-panel bi-res">
+            <div class="bi-hdr">
+              <span
+                ><i
+                  class="ti ti-arrow-down"
+                  style="font-size: 11px; margin-right: 4px"
+                  aria-hidden="true"
+                ></i
+                >Response body</span
+              >
+              <div style="display: flex; gap: 6px; align-items: center">
+                <span class="bi-size" id="res-size"></span>
+                <button class="copy-btn" onclick="copyJSON('res-json-raw', 'copy-res')">
+                  copy
+                </button>
+              </div>
+            </div>
+            <div class="bi-meta" id="res-meta"></div>
+            <div class="headers-section">
+              <div
+                style="
+                  padding: 4px 10px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <span
+                  style="
+                    font-size: 9px;
+                    color: #3d4466;
+                    letter-spacing: 0.06em;
+                    text-transform: uppercase;
+                  "
+                  >Headers</span
+                >
+                <button class="headers-toggle" onclick="toggleHeaders('res-headers')">show</button>
+              </div>
+              <div id="res-headers" style="display: none; padding: 0 10px 6px"></div>
+            </div>
+            <div class="json-wrap" id="res-json-display"></div>
+            <span id="res-json-raw" style="display: none"></span>
+            <span id="copy-res"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="statbar">
+        <div class="sc">
+          <div class="sv" id="st-tot">12</div>
+          <div class="sl">total</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color: #34d399" id="st-ok">10</div>
+          <div class="sl">2xx</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color: #f87171" id="st-err">1</div>
+          <div class="sl">errors</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color: #a5b4fc" id="st-avg">34ms</div>
+          <div class="sl">avg</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color: #fbbf24" id="st-lag">0.3ms</div>
+          <div class="sl">loop lag</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color: #67e8f9" id="st-pool">1/4</div>
+          <div class="sl">thread pool</div>
+        </div>
+      </div>
+
+      <div class="ctrlbar">
+        <button class="cb on" id="btn-live" onclick="toggleLive()">
+          <i class="ti ti-player-pause" style="font-size: 9px" aria-hidden="true"></i> pause
+        </button>
+        <button class="cb" onclick="clr()">
+          <i class="ti ti-trash" style="font-size: 9px" aria-hidden="true"></i> clear
+        </button>
+        <button class="cb" onclick="simReq()">
+          <i class="ti ti-plus" style="font-size: 9px" aria-hidden="true"></i> simulate req
+        </button>
+        <div class="ml">
+          <span class="flbl">sort:</span>
+          <button class="cb on" onclick="setSort('time', this)">newest</button>
+          <button class="cb" onclick="setSort('dur', this)">slowest</button>
+          <button class="cb" onclick="setSort('err', this)">errors first</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const APIS = [
+    'fs.readFile',
+    'pg.query',
+    'net.connect',
+    'dns.lookup',
+    'setTimeout',
+    'setInterval',
+    'setImmediate',
+    'http.request',
+    'crypto.pbkdf2',
+    'zlib.gzip',
+    'child_process',
+    'worker_threads',
+  ];
+  const PHASE_COLORS = {
+    poll: '#22d3ee',
+    timers: '#fbbf24',
+    check: '#34d399',
+    close: '#f87171',
+    pending: '#a78bfa',
+    idle: '#64748b',
+  };
+
+  const requests = [
+    {
+      id: 0,
+      method: 'GET',
+      path: '/api/users',
+      status: 200,
+      dur: 42,
+      stack: [
+        'getUserById()',
+        'UserService.findOne()',
+        'handleRequest()',
+        'Layer.handle()',
+        'GEC — global scope',
+      ],
+      activeApis: ['pg.query', 'dns.lookup'],
+      phase: 'poll',
+      phaseSub: 'waiting for DB I/O',
+      threads: 1,
+      macro: ['setTimeout cb (health check)'],
+      micro: ['Promise.resolve → parseRows'],
+      wf: [
+        { name: 'DNS lookup', start: 0, dur: 8, color: '#60a5fa' },
+        { name: 'pg.query', start: 2, dur: 37, color: '#a78bfa' },
+        { name: 'Redis GET', start: 0, dur: 2, color: '#34d399' },
+      ],
+      timeline: [
+        {
+          dot: '#4ade80',
+          name: 'request received',
+          meta: 'NestJS middleware chain entered · GEC pushed',
+          ts: '0ms',
+        },
+        {
+          dot: '#a78bfa',
+          name: 'UserService.findOne() called',
+          meta: 'FEC pushed · DB query constructed',
+          ts: '1ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'pg.query() → offloaded to libuv',
+          meta: 'thread pool #1 · call stack cleared · poll',
+          ts: '2ms',
+        },
+        {
+          dot: '#4ade80',
+          name: 'DB result returned',
+          meta: 'microtask: Promise.resolve(rows)',
+          ts: '39ms',
+        },
+        {
+          dot: '#4ade80',
+          name: 'res.json() → response sent',
+          meta: '200 OK · 3 users',
+          ts: '42ms',
+        },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '37ms',
+          query: 'SELECT * FROM users WHERE id=$1',
+          pct: 88,
+          barColor: '#7c3aed',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '2ms',
+          query: 'GET cache:user:42',
+          pct: 5,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '8ms',
+          query: 'users-db.internal → 10.0.0.5',
+          pct: 19,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: null,
+      reqHeaders: {
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-request-id': 'req_a1b2c3',
+        'User-Agent': 'axios/1.6.2',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'GET' },
+        { k: 'URL', v: '/api/users?limit=20&page=1' },
+        { k: 'Content-Type', v: 'none' },
+        { k: 'Auth', v: 'Bearer JWT' },
+      ],
+      resBody: {
+        success: true,
+        data: [
+          {
+            id: 1,
+            name: 'Alice Nguyen',
+            email: 'alice@example.com',
+            role: 'admin',
+            createdAt: '2024-01-15T08:30:00Z',
+          },
+          {
+            id: 2,
+            name: 'Bob Petrov',
+            email: 'bob@example.com',
+            role: 'user',
+            createdAt: '2024-02-20T12:00:00Z',
+          },
+          {
+            id: 3,
+            name: 'Carol Lima',
+            email: 'carol@example.com',
+            role: 'user',
+            createdAt: '2024-03-01T09:45:00Z',
+          },
+        ],
+        meta: { total: 3, page: 1, limit: 20 },
+      },
+      resHeaders: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Response-Time': '42ms',
+        'Cache-Control': 'no-cache',
+        'x-request-id': 'req_a1b2c3',
+        ETag: 'W/"abc123"',
+      },
+      resMeta: [
+        { k: 'Status', v: '200 OK', cls: 'bi-tag-v' },
+        { k: 'Time', v: '42ms' },
+        { k: 'Size', v: '428 B' },
+        { k: 'Content-Type', v: 'application/json' },
+      ],
+    },
+    {
+      id: 1,
+      method: 'POST',
+      path: '/api/orders',
+      status: 0,
+      dur: null,
+      stack: [
+        'createOrder()',
+        'OrderService.create()',
+        'validateBody()',
+        'handleRequest()',
+        'Layer.handle()',
+        'GEC — global scope',
+      ],
+      activeApis: ['pg.query', 'http.request', 'crypto.pbkdf2'],
+      phase: 'timers',
+      phaseSub: 'running timer callbacks',
+      threads: 3,
+      macro: ['setTimeout cb', 'setInterval (heartbeat)'],
+      micro: ['Promise → validateStock', 'Promise → reserveItem'],
+      wf: [
+        { name: 'DNS stock-api', start: 0, dur: 8, color: '#60a5fa' },
+        { name: 'http.request', start: 3, dur: 200, color: '#fbbf24' },
+        { name: 'crypto.pbkdf2', start: 4, dur: 45, color: '#f87171' },
+        { name: 'pg.query INSERT', start: 6, dur: 120, color: '#a78bfa' },
+        { name: 'Redis SET', start: 1, dur: 3, color: '#34d399' },
+      ],
+      timeline: [
+        {
+          dot: '#4ade80',
+          name: 'request received',
+          meta: 'POST body parsed · middleware entered',
+          ts: '0ms',
+        },
+        {
+          dot: '#a78bfa',
+          name: 'validateBody() called',
+          meta: 'DTO validation · schema check passed',
+          ts: '1ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'http.request() → stock API',
+          meta: 'outgoing HTTP · libuv thread #1',
+          ts: '3ms',
+        },
+        {
+          dot: '#fbbf24',
+          name: 'crypto.pbkdf2() → hash token',
+          meta: 'CPU-bound · thread pool #2',
+          ts: '4ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'pg.query() → insert order',
+          meta: 'thread pool #3 · awaiting stock API too',
+          ts: '6ms',
+        },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: 'pending',
+          statusColor: '#fbbf24',
+          dur: '~120ms',
+          query: 'INSERT INTO orders VALUES ($1,$2,...)',
+          pct: 60,
+          barColor: '#7c3aed',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: 'pending',
+          statusColor: '#fbbf24',
+          dur: '~200ms',
+          query: 'GET https://stock-api.io/reserve',
+          pct: 40,
+          barColor: '#d97706',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '3ms',
+          query: 'SET session:order:pending',
+          pct: 2,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '8ms',
+          query: 'stock-api.io → 142.250.80.46',
+          pct: 10,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: {
+        userId: 42,
+        items: [
+          { productId: 7, qty: 2, price: 29.99 },
+          { productId: 12, qty: 1, price: 59.99 },
+        ],
+        shippingAddress: { street: '123 Main St', city: 'Dhaka', country: 'BD' },
+        couponCode: 'SAVE10',
+        notes: 'Leave at door',
+      },
+      reqHeaders: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        'x-request-id': 'req_d4e5f6',
+        'Content-Length': '218',
+        Accept: 'application/json',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'POST' },
+        { k: 'URL', v: '/api/orders' },
+        { k: 'Content-Type', v: 'application/json' },
+        { k: 'Body size', v: '218 B' },
+      ],
+      resBody: null,
+      resHeaders: {},
+      resMeta: [
+        { k: 'Status', v: 'pending', cls: 'bi-tag-w' },
+        { k: 'Time', v: 'pending...' },
+        { k: 'Size', v: '—' },
+      ],
+    },
+    {
+      id: 2,
+      method: 'GET',
+      path: '/api/products',
+      status: 200,
+      dur: 18,
+      stack: ['getProducts()', 'ProductService.findAll()', 'handleRequest()', 'GEC — global scope'],
+      activeApis: ['pg.query'],
+      phase: 'check',
+      phaseSub: 'setImmediate callbacks',
+      threads: 1,
+      macro: [],
+      micro: ['Promise → serialize'],
+      wf: [{ name: 'Redis HIT', start: 0, dur: 2, color: '#34d399' }],
+      timeline: [
+        {
+          dot: '#4ade80',
+          name: 'request received',
+          meta: 'GEC pushed · middleware entered',
+          ts: '0ms',
+        },
+        {
+          dot: '#a78bfa',
+          name: 'ProductService.findAll() called',
+          meta: 'Redis cache checked first',
+          ts: '1ms',
+        },
+        {
+          dot: '#34d399',
+          name: 'Redis HIT → cache returned',
+          meta: 'no DB needed · Promise resolved',
+          ts: '3ms',
+        },
+        {
+          dot: '#4ade80',
+          name: 'res.json() → response sent',
+          meta: '200 OK · 24 products',
+          ts: '18ms',
+        },
+      ],
+      async: [
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '2ms',
+          query: 'GET cache:products:all',
+          pct: 12,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'cache hit — DB skipped',
+          pct: 0,
+          barColor: '#7c3aed',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no DNS needed',
+          pct: 0,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: null,
+      reqHeaders: {
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        Accept: 'application/json',
+        'x-request-id': 'req_g7h8i9',
+        'Cache-Control': 'no-cache',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'GET' },
+        { k: 'URL', v: '/api/products?category=electronics&sort=price' },
+        { k: 'Auth', v: 'Bearer JWT' },
+        { k: 'Body', v: 'none' },
+      ],
+      resBody: {
+        success: true,
+        data: [
+          { id: 1, name: 'Wireless Headphones', price: 89.99, stock: 42, category: 'electronics' },
+          { id: 2, name: 'USB-C Hub', price: 34.99, stock: 120, category: 'electronics' },
+          { id: 3, name: 'Mechanical Keyboard', price: 129.99, stock: 18, category: 'electronics' },
+        ],
+        meta: { total: 24, page: 1, cached: true, cachedAt: '2024-06-22T09:00:00Z' },
+      },
+      resHeaders: {
+        'Content-Type': 'application/json',
+        'X-Response-Time': '18ms',
+        'X-Cache': 'HIT',
+        'Cache-Control': 'max-age=60',
+        'x-request-id': 'req_g7h8i9',
+      },
+      resMeta: [
+        { k: 'Status', v: '200 OK', cls: 'bi-tag-v' },
+        { k: 'Time', v: '18ms' },
+        { k: 'Size', v: '612 B' },
+        { k: 'X-Cache', v: 'HIT' },
+      ],
+    },
+    {
+      id: 3,
+      method: 'DELETE',
+      path: '/api/users/7',
+      status: 500,
+      dur: 87,
+      stack: ['deleteUser()', 'UserService.remove()', 'handleRequest()', 'GEC — global scope'],
+      activeApis: ['pg.query'],
+      phase: 'poll',
+      phaseSub: 'DB error — constraint violation',
+      threads: 1,
+      macro: [],
+      micro: [],
+      wf: [{ name: 'pg.query DELETE', start: 4, dur: 80, color: '#f87171' }],
+      timeline: [
+        {
+          dot: '#4ade80',
+          name: 'request received',
+          meta: 'DELETE /api/users/7 · auth verified',
+          ts: '0ms',
+        },
+        {
+          dot: '#a78bfa',
+          name: 'UserService.remove() called',
+          meta: 'building DELETE query',
+          ts: '2ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'pg.query() → offloaded',
+          meta: 'DELETE FROM users WHERE id=$1 · thread #1',
+          ts: '4ms',
+        },
+        {
+          dot: '#f87171',
+          name: 'DB error → FK constraint',
+          meta: 'ERROR: violates fk constraint "orders_user_id_fkey"',
+          ts: '84ms',
+        },
+        {
+          dot: '#f87171',
+          name: '500 error response sent',
+          meta: 'InternalServerException · stack trace logged',
+          ts: '87ms',
+        },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#f87171',
+          status: 'error',
+          statusColor: '#f87171',
+          dur: '80ms',
+          query: 'DELETE FROM users WHERE id=$1 → FK error',
+          pct: 92,
+          barColor: '#dc2626',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no cache interaction',
+          pct: 0,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no DNS needed',
+          pct: 0,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: null,
+      reqHeaders: {
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        'x-request-id': 'req_j1k2l3',
+        Accept: 'application/json',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'DELETE' },
+        { k: 'URL', v: '/api/users/7' },
+        { k: 'Auth', v: 'Bearer JWT' },
+        { k: 'Body', v: 'none' },
+      ],
+      resBody: {
+        success: false,
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          status: 500,
+          message: 'Foreign key constraint violation',
+          detail: 'Key (id)=(7) is still referenced from table "orders"',
+          constraint: 'orders_user_id_fkey',
+          table: 'orders',
+          timestamp: '2024-06-22T10:15:33Z',
+          requestId: 'req_j1k2l3',
+        },
+      },
+      resHeaders: {
+        'Content-Type': 'application/json',
+        'X-Response-Time': '87ms',
+        'x-request-id': 'req_j1k2l3',
+      },
+      resMeta: [
+        { k: 'Status', v: '500 Error', cls: 'bi-tag-e' },
+        { k: 'Time', v: '87ms' },
+        { k: 'Size', v: '284 B' },
+        { k: 'Error', v: 'FK constraint' },
+      ],
+    },
+    {
+      id: 4,
+      method: 'GET',
+      path: '/api/orders/22',
+      status: 200,
+      dur: 29,
+      stack: ['getOrderById()', 'OrderService.findOne()', 'handleRequest()', 'GEC — global scope'],
+      activeApis: ['pg.query', 'net.connect'],
+      phase: 'poll',
+      phaseSub: 'awaiting DB result',
+      threads: 1,
+      macro: [],
+      micro: ['Promise → mapOrder'],
+      wf: [{ name: 'pg.query JOIN', start: 3, dur: 24, color: '#a78bfa' }],
+      timeline: [
+        { dot: '#4ade80', name: 'request received', meta: 'GEC pushed · auth verified', ts: '0ms' },
+        {
+          dot: '#a78bfa',
+          name: 'OrderService.findOne() called',
+          meta: 'JOIN query with user + items',
+          ts: '1ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'pg.query() → JOIN offloaded',
+          meta: 'thread pool #1 · poll phase',
+          ts: '3ms',
+        },
+        {
+          dot: '#4ade80',
+          name: 'DB result returned',
+          meta: 'microtask: Promise → mapOrder · 3 items',
+          ts: '27ms',
+        },
+        {
+          dot: '#4ade80',
+          name: 'res.json() → response sent',
+          meta: '200 OK · order #22',
+          ts: '29ms',
+        },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '24ms',
+          query: 'SELECT o.*, u.name FROM orders o JOIN users u',
+          pct: 82,
+          barColor: '#7c3aed',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no cache for order detail',
+          pct: 0,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no DNS needed',
+          pct: 0,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: null,
+      reqHeaders: {
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        'x-request-id': 'req_m4n5o6',
+        Accept: 'application/json',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'GET' },
+        { k: 'URL', v: '/api/orders/22' },
+        { k: 'Auth', v: 'Bearer JWT' },
+        { k: 'Body', v: 'none' },
+      ],
+      resBody: {
+        success: true,
+        data: {
+          id: 22,
+          status: 'confirmed',
+          userId: 1,
+          user: { name: 'Alice Nguyen', email: 'alice@example.com' },
+          items: [
+            { productId: 7, name: 'Wireless Headphones', qty: 2, price: 29.99 },
+            { productId: 12, name: 'USB-C Hub', qty: 1, price: 34.99 },
+            { productId: 3, name: 'Mechanical Keyboard', qty: 1, price: 129.99 },
+          ],
+          subtotal: 224.96,
+          tax: 22.5,
+          total: 247.46,
+          createdAt: '2024-06-20T14:00:00Z',
+        },
+      },
+      resHeaders: {
+        'Content-Type': 'application/json',
+        'X-Response-Time': '29ms',
+        'x-request-id': 'req_m4n5o6',
+      },
+      resMeta: [
+        { k: 'Status', v: '200 OK', cls: 'bi-tag-v' },
+        { k: 'Time', v: '29ms' },
+        { k: 'Size', v: '516 B' },
+      ],
+    },
+    {
+      id: 5,
+      method: 'PUT',
+      path: '/api/products/5',
+      status: 200,
+      dur: 55,
+      stack: [
+        'updateProduct()',
+        'ProductService.update()',
+        'validateBody()',
+        'handleRequest()',
+        'GEC — global scope',
+      ],
+      activeApis: ['pg.query', 'zlib.gzip', 'redis'],
+      phase: 'poll',
+      phaseSub: 'DB update in progress',
+      threads: 2,
+      macro: ['setTimeout cb'],
+      micro: ['Promise → validate', 'Promise → compress'],
+      wf: [
+        { name: 'pg.query UPDATE', start: 3, dur: 48, color: '#a78bfa' },
+        { name: 'Redis DEL×2', start: 4, dur: 4, color: '#34d399' },
+      ],
+      timeline: [
+        {
+          dot: '#4ade80',
+          name: 'request received',
+          meta: 'PUT body parsed · DTO validation',
+          ts: '0ms',
+        },
+        {
+          dot: '#a78bfa',
+          name: 'validateBody() → ProductUpdateDto',
+          meta: 'class-validator passed',
+          ts: '1ms',
+        },
+        {
+          dot: '#60a5fa',
+          name: 'pg.query() → UPDATE offloaded',
+          meta: 'UPDATE products SET name=$1 WHERE id=$2',
+          ts: '3ms',
+        },
+        {
+          dot: '#34d399',
+          name: 'Redis cache invalidated',
+          meta: 'DEL cache:products:all · DEL cache:product:5',
+          ts: '4ms',
+        },
+        {
+          dot: '#4ade80',
+          name: '200 OK → response sent',
+          meta: 'updated product returned',
+          ts: '55ms',
+        },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '48ms',
+          query: 'UPDATE products SET name=$1,price=$2 WHERE id=$3',
+          pct: 87,
+          barColor: '#7c3aed',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: '4ms',
+          query: 'DEL cache:products:all, DEL cache:product:5',
+          pct: 8,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no DNS needed',
+          pct: 0,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: {
+        name: 'Premium USB-C Hub Pro',
+        price: 44.99,
+        stock: 85,
+        description: '7-in-1 USB-C hub with 4K HDMI, 100W PD, 3x USB-A 3.0, SD card reader',
+        category: 'electronics',
+        tags: ['usb-c', 'hub', '4k', 'pd-charging'],
+      },
+      reqHeaders: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        'x-request-id': 'req_p7q8r9',
+        'Content-Length': '194',
+      },
+      reqMeta: [
+        { k: 'Method', v: 'PUT' },
+        { k: 'URL', v: '/api/products/5' },
+        { k: 'Content-Type', v: 'application/json' },
+        { k: 'Body size', v: '194 B' },
+      ],
+      resBody: {
+        success: true,
+        data: {
+          id: 5,
+          name: 'Premium USB-C Hub Pro',
+          price: 44.99,
+          stock: 85,
+          category: 'electronics',
+          tags: ['usb-c', 'hub', '4k', 'pd-charging'],
+          updatedAt: '2024-06-22T10:30:00Z',
+        },
+        meta: { cacheInvalidated: ['cache:products:all', 'cache:product:5'] },
+      },
+      resHeaders: {
+        'Content-Type': 'application/json',
+        'X-Response-Time': '55ms',
+        'x-request-id': 'req_p7q8r9',
+      },
+      resMeta: [
+        { k: 'Status', v: '200 OK', cls: 'bi-tag-v' },
+        { k: 'Time', v: '55ms' },
+        { k: 'Size', v: '312 B' },
+      ],
+    },
+  ];
+
+  let cur = 0,
+    live = true,
+    ticker,
+    pendMs = 0,
+    totalReqs = 12,
+    curFilter = 'all',
+    curSort = 'time',
+    curTab = 'runtime';
+
+  function methodBadge(m) {
+    return { GET: 'bg', POST: 'bp', PUT: 'bu', DELETE: 'bd', DEL: 'bd' }[m] || 'bg';
+  }
+  function statusColor(s) {
+    if (!s || s === 0) return 's-pend';
+    if (s >= 400) return 's-err';
+    return 's-ok';
+  }
+  function statusText(r) {
+    if (!r.status || r.status === 0) return 'pending';
+    return r.status + (r.status >= 400 ? ' ERR' : ' OK');
+  }
+
+  function filteredAndSorted() {
+    let list = [...requests];
+    if (curFilter === '2xx') list = list.filter((r) => r.status >= 200 && r.status < 300);
+    else if (curFilter === 'err') list = list.filter((r) => r.status >= 400 || r.status === 500);
+    else if (curFilter === 'slow') list = list.filter((r) => r.dur && r.dur > 50);
+    if (curSort === 'dur') list.sort((a, b) => (b.dur || 9999) - (a.dur || 9999));
+    else if (curSort === 'err')
+      list.sort((a, b) => {
+        const ae = a.status >= 400 ? 0 : 1,
+          be = b.status >= 400 ? 0 : 1;
+        return ae - be;
+      });
+    return list;
+  }
+
+  function renderSidebar() {
+    const list = filteredAndSorted();
+    document.getElementById('req-list').innerHTML = list
+      .map(
+        (r) => `
+    <div class="rq-item${r.id === cur ? ' active' : ''}" onclick="pick(${r.id})">
+      <div class="rq-top"><span class="badge ${methodBadge(r.method)}">${r.method}</span><span class="rq-path">${r.path}</span></div>
+      <div class="rq-meta">
+        <span class="${statusColor(r.status)}">${statusText(r)}</span>
+        <span>${r.id === 1 ? '<span id="pms">' + pendMs + 'ms</span>' : r.dur + 'ms'}</span>
+      </div>
+    </div>`,
+      )
+      .join('');
+  }
+
+  function colorizeJSON(obj, indent = 0) {
+    const pad = ' '.repeat(indent * 2);
+    const pad1 = ' '.repeat((indent + 1) * 2);
+    if (obj === null) return `<span class="j-null">null</span>`;
+    if (typeof obj === 'boolean') return `<span class="j-bool">${obj}</span>`;
+    if (typeof obj === 'number') return `<span class="j-num">${obj}</span>`;
+    if (typeof obj === 'string') return `<span class="j-str">"${obj}"</span>`;
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return `<span class="j-brace">[]</span>`;
+      const items = obj
+        .map((v) => pad1 + colorizeJSON(v, indent + 1))
+        .join(`<span class="j-brace">,</span>\n`);
+      return `<span class="j-brace">[</span>\n${items}\n${pad}<span class="j-brace">]</span>`;
+    }
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return `<span class="j-brace">{}</span>`;
+    const lines = keys
+      .map(
+        (k) =>
+          `${pad1}<span class="j-key">"${k}"</span><span class="j-brace">: </span>${colorizeJSON(obj[k], indent + 1)}`,
+      )
+      .join(`<span class="j-brace">,</span>\n`);
+    return `<span class="j-brace">{</span>\n${lines}\n${pad}<span class="j-brace">}</span>`;
+  }
+
+  function renderHeaders(data) {
+    return Object.entries(data)
+      .map(
+        ([k, v]) => `
+    <div style="display:flex;gap:6px;margin-bottom:3px;font-size:9px;align-items:flex-start">
+      <span style="color:#64748b;min-width:120px;flex-shrink:0">${k}</span>
+      <span style="color:#94a3b8;word-break:break-all">${v}</span>
+    </div>`,
+      )
+      .join('');
+  }
+
+  function renderBodies(d) {
+    // Request
+    const reqMeta = document.getElementById('req-meta');
+    reqMeta.innerHTML = d.reqMeta
+      .map(
+        (t) =>
+          `<span class="bi-tag bi-tag-k">${t.k}</span><span class="bi-tag ${t.cls || 'bi-tag-h'}">${t.v}</span>`,
+      )
+      .join('');
+    document.getElementById('req-headers').innerHTML = renderHeaders(d.reqHeaders);
+    if (d.reqBody) {
+      const raw = JSON.stringify(d.reqBody, null, 2);
+      document.getElementById('req-json-display').innerHTML = colorizeJSON(d.reqBody);
+      document.getElementById('req-json-raw').textContent = raw;
+      document.getElementById('req-size').textContent = raw.length + ' B';
+    } else {
+      document.getElementById('req-json-display').innerHTML =
+        '<div class="no-body">No request body</div>';
+      document.getElementById('req-json-raw').textContent = '';
+      document.getElementById('req-size').textContent = '—';
+    }
+
+    // Response
+    const resMeta = document.getElementById('res-meta');
+    resMeta.innerHTML = d.resMeta
+      .map(
+        (t) =>
+          `<span class="bi-tag bi-tag-k">${t.k}</span><span class="bi-tag ${t.cls || 'bi-tag-v'}">${t.v}</span>`,
+      )
+      .join('');
+    document.getElementById('res-headers').innerHTML = Object.keys(d.resHeaders).length
+      ? renderHeaders(d.resHeaders)
+      : '<div class="no-body">No response headers yet</div>';
+    if (d.status === 0) {
+      document.getElementById('res-json-display').innerHTML =
+        '<div class="pending-body"><i class="ti ti-loader" style="font-size:14px;display:block;margin:0 auto 6px" aria-hidden="true"></i>Waiting for response...</div>';
+      document.getElementById('res-json-raw').textContent = '';
+      document.getElementById('res-size').textContent = '—';
+    } else if (d.resBody) {
+      const raw = JSON.stringify(d.resBody, null, 2);
+      document.getElementById('res-json-display').innerHTML = colorizeJSON(d.resBody);
+      document.getElementById('res-json-raw').textContent = raw;
+      document.getElementById('res-size').textContent = raw.length + ' B';
+    } else {
+      document.getElementById('res-json-display').innerHTML =
+        '<div class="no-body">No response body</div>';
+      document.getElementById('res-json-raw').textContent = '';
+      document.getElementById('res-size').textContent = '—';
+    }
+  }
+
+  function renderRuntime(d) {
+    document.getElementById('sel-lbl').textContent =
+      '● ' + d.method + ' ' + d.path + ' — ' + statusText(d) + ' — ' + (d.dur || 'pending...');
+    document.getElementById('stack-panel').innerHTML = d.stack
+      .map((f, i) => {
+        const cls = i === 0 ? 'f0' : i === d.stack.length - 1 ? 'fg' : 'fn';
+        return `<div class="frame ${cls}">${f}</div>`;
+      })
+      .join('');
+    document.getElementById('api-panel').innerHTML = APIS.map(
+      (a) => `<span class="chip ${d.activeApis.includes(a) ? 'on' : 'off'}">${a}</span>`,
+    ).join('');
+    const n = d.threads;
+    document.getElementById('thread-viz').innerHTML = Array.from(
+      { length: 4 },
+      (_, i) => `<div class="thr${i < n ? ' busy' : ''}"></div>`,
+    ).join('');
+    document.getElementById('thread-sub').textContent = n + '/4 libuv threads busy';
+    document.getElementById('thread-lbl').textContent = n + '/4 threads';
+    const pc = PHASE_COLORS[d.phase] || '#22d3ee';
+    document.getElementById('lp-name').textContent = d.phase;
+    document.getElementById('lp-name').style.color = pc;
+    document.getElementById('lp-sub').textContent = d.phaseSub;
+    document.getElementById('loop-ring').style.borderColor = pc;
+    document.getElementById('loop-ring').querySelector('i').style.color = pc;
+    document.getElementById('loop-box').style.borderColor = pc;
+    document.getElementById('tq-body').innerHTML = d.macro.length
+      ? d.macro
+          .map(
+            (m) =>
+              `<span class="qchip qmacro"><i class="ti ti-clock" style="font-size:9px" aria-hidden="true"></i>${m}</span>`,
+          )
+          .join('')
+      : '<span class="q-empty">empty</span>';
+    document.getElementById('mq-body').innerHTML = d.micro.length
+      ? d.micro
+          .map(
+            (m) =>
+              `<span class="qchip qmicro"><i class="ti ti-bolt" style="font-size:9px" aria-hidden="true"></i>${m}</span>`,
+          )
+          .join('')
+      : '<span class="q-empty">empty</span>';
+    const maxMs = d.wf.reduce((mx, w) => Math.max(mx, w.start + w.dur), 1);
+    document.getElementById('waterfall').innerHTML = d.wf
+      .map((w) => {
+        const left = Math.round((w.start / maxMs) * 100),
+          width = Math.max(2, Math.round((w.dur / maxMs) * 100));
+        return `<div class="wf-row"><div class="wf-lbl">${w.name}</div><div class="wf-track"><div class="wf-bar" style="left:${left}%;width:${width}%;background:${w.color}"></div></div><div class="wf-ms">${w.dur}ms</div></div>`;
+      })
+      .join('');
+    document.getElementById('tl-hdr').textContent = 'request timeline — ' + d.method + ' ' + d.path;
+    document.getElementById('tl-body').innerHTML = d.timeline
+      .map(
+        (e) => `
+    <div class="tl-row">
+      <div class="tl-dot" style="background:${e.dot}"></div>
+      <div class="tl-card"><div class="tl-name">${e.name}</div><div class="tl-meta">${e.meta}</div></div>
+      <div class="tl-ts">${e.ts}</div>
+    </div>`,
+      )
+      .join('');
+    document.getElementById('async-grid').innerHTML = d.async
+      .map(
+        (a) => `
+    <div class="async-card">
+      <div class="async-top"><span class="async-name" style="color:${a.color}">${a.name}</span><span class="async-stat" style="color:${a.statusColor}">${a.status}</span></div>
+      <div class="async-dur${a.pct === 0 ? ' dim' : ''}">${a.dur}</div>
+      <div class="async-q">${a.query}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${a.pct}%;background:${a.barColor}"></div></div>
+    </div>`,
+      )
+      .join('');
+  }
+
+  function pick(id) {
+    cur = id;
+    renderSidebar();
+    const d = requests.find((r) => r.id === id);
+    renderRuntime(d);
+    renderBodies(d);
+  }
+
+  function switchTab(tab, el) {
+    curTab = tab;
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('on'));
+    document.getElementById('tab-' + tab).classList.add('on');
+  }
+
+  function toggleHeaders(id) {
+    const el = document.getElementById(id);
+    const btn = el.previousElementSibling.querySelector('.headers-toggle');
+    const hidden = el.style.display === 'none';
+    el.style.display = hidden ? 'block' : 'none';
+    btn.textContent = hidden ? 'hide' : 'show';
+  }
+
+  function copyJSON(rawId, statusId) {
+    const raw = document.getElementById(rawId).textContent;
+    if (!raw) return;
+    navigator.clipboard
+      .writeText(raw)
+      .then(() => {
+        const btns = document.querySelectorAll('.copy-btn');
+        btns.forEach((b) => {
+          if (b.getAttribute('onclick').includes(statusId)) {
+            b.textContent = 'copied!';
+            b.classList.add('copied');
+            setTimeout(() => {
+              b.textContent = 'copy';
+              b.classList.remove('copied');
+            }, 1500);
+          }
+        });
+      })
+      .catch(() => {});
+  }
+
+  function setFilter(f, btn) {
+    curFilter = f;
+    document.querySelectorAll('.filter-bar .fb').forEach((b) => b.classList.remove('on'));
+    btn.classList.add('on');
+    renderSidebar();
+  }
+
+  function setSort(s, btn) {
+    curSort = s;
+    document.querySelectorAll('.ml .cb').forEach((b) => b.classList.remove('on'));
+    btn.classList.add('on');
+    renderSidebar();
+  }
+
+  function toggleLive() {
+    live = !live;
+    const btn = document.getElementById('btn-live');
+    const ring = document.getElementById('loop-ring');
+    if (live) {
+      btn.innerHTML =
+        '<i class="ti ti-player-pause" style="font-size:9px" aria-hidden="true"></i> pause';
+      btn.classList.add('on');
+      ring.classList.add('go');
+      startTick();
+    } else {
+      btn.innerHTML =
+        '<i class="ti ti-player-play" style="font-size:9px" aria-hidden="true"></i> resume';
+      btn.classList.remove('on');
+      ring.classList.remove('go');
+      clearInterval(ticker);
+    }
+  }
+
+  function clr() {
+    totalReqs = 0;
+    document.getElementById('rc').textContent = '0';
+    document.getElementById('st-tot').textContent = '0';
+  }
+
+  function simReq() {
+    const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+    const paths = ['/api/auth/login', '/api/metrics', '/api/health', '/api/webhooks'];
+    const statuses = [200, 200, 200, 201, 400, 500];
+    const m = methods[Math.floor(Math.random() * methods.length)];
+    const p = paths[Math.floor(Math.random() * paths.length)];
+    const s = statuses[Math.floor(Math.random() * statuses.length)];
+    const d = Math.floor(Math.random() * 200) + 5;
+    totalReqs++;
+    document.getElementById('rc').textContent = totalReqs;
+    document.getElementById('st-tot').textContent = totalReqs;
+    const newReq = {
+      id: requests.length,
+      method: m,
+      path: p,
+      status: s,
+      dur: d,
+      stack: ['handler()', 'Service.exec()', 'handleRequest()', 'GEC — global scope'],
+      activeApis: ['pg.query'],
+      phase: 'poll',
+      phaseSub: 'awaiting result',
+      threads: 1,
+      macro: [],
+      micro: ['Promise → result'],
+      wf: [{ name: 'pg.query', start: 2, dur: d - 5, color: '#a78bfa' }],
+      timeline: [
+        { dot: '#4ade80', name: 'request received', meta: 'middleware entered', ts: '0ms' },
+        { dot: '#a78bfa', name: 'service called', meta: 'query constructed', ts: '2ms' },
+        { dot: '#4ade80', name: 'response sent', meta: s + ' · ' + d + 'ms total', ts: d + 'ms' },
+      ],
+      async: [
+        {
+          name: 'PostgreSQL',
+          color: '#a78bfa',
+          status: 'done',
+          statusColor: '#34d399',
+          dur: d - 5 + 'ms',
+          query: 'SELECT * FROM ...',
+          pct: 90,
+          barColor: '#7c3aed',
+        },
+        {
+          name: 'Redis',
+          color: '#34d399',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no cache',
+          pct: 0,
+          barColor: '#0f9b6e',
+        },
+        {
+          name: '3rd-party API',
+          color: '#fbbf24',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no outgoing HTTP',
+          pct: 0,
+          barColor: '#d97706',
+        },
+        {
+          name: 'DNS lookup',
+          color: '#60a5fa',
+          status: '—',
+          statusColor: '#3d4466',
+          dur: 'not called',
+          query: 'no DNS needed',
+          pct: 0,
+          barColor: '#2563eb',
+        },
+      ],
+      reqBody: m === 'GET' || m === 'DELETE' ? null : { data: 'simulated payload' },
+      reqHeaders: {
+        'Content-Type': 'application/json',
+        'x-request-id': 'req_sim_' + Math.random().toString(36).slice(2, 8),
+      },
+      reqMeta: [
+        { k: 'Method', v: m },
+        { k: 'URL', v: p },
+      ],
+      resBody:
+        s >= 400
+          ? { success: false, error: { code: s, message: 'Simulated error' } }
+          : { success: true, data: { result: 'ok', duration: d } },
+      resHeaders: { 'Content-Type': 'application/json', 'X-Response-Time': d + 'ms' },
+      resMeta: [
+        {
+          k: 'Status',
+          v: s + (s >= 400 ? ' ERR' : ' OK'),
+          cls: s >= 400 ? 'bi-tag-e' : 'bi-tag-v',
+        },
+        { k: 'Time', v: d + 'ms' },
+      ],
+    };
+    requests.unshift(newReq);
+    cur = newReq.id;
+    renderSidebar();
+    renderRuntime(newReq);
+    renderBodies(newReq);
+  }
+
+  function startTick() {
+    ticker = setInterval(() => {
+      if (!live) return;
+      pendMs += 50;
+      const pm = document.getElementById('pms');
+      if (pm) pm.textContent = pendMs + 'ms';
+      const lag = (Math.random() * 0.9 + 0.1).toFixed(1);
+      document.getElementById('llg').textContent = lag + 'ms';
+      document.getElementById('st-lag').textContent = lag + 'ms';
+    }, 500);
+  }
+
+  startTick();
+  renderSidebar();
+  const d = requests[0];
+  renderRuntime(d);
+  renderBodies(d);
+</script>
