@@ -8,6 +8,10 @@ on:
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+  # Node 20 is deprecated on GitHub Actions runners. Allow it temporarily
+  # so the minimum-supported-version job can still run. Remove this and
+  # the 20.x matrix entry once Node 20 is fully EOL.
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
 
 jobs:
   build:
@@ -18,7 +22,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: ['18.17.0', '20.18.0', '22.11.0']
+        # 20.x = minimum supported, 22.x = active LTS, 24.x = current.
+        node: ['20.18.0', '22.11.0', '24.x']
 
     steps:
       - name: Checkout
@@ -28,8 +33,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -56,7 +59,7 @@ jobs:
         run: pnpm -r build
 
       - name: Upload build artifacts
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.11.0'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '24.x'
         uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -76,12 +79,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.11.0'
+          node-version: '24.x'
           cache: pnpm
 
       - name: Install dependencies

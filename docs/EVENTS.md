@@ -25,7 +25,7 @@ Sent once, immediately after the WebSocket upgrade.
       // ... subset of public options
     },
     server: {
-      node: 'v20.11.0',
+      node: 'v24.0.0',
       pid: 12345,
       uptime: 123.4,
       framework: 'express',

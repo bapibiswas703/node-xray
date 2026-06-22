@@ -25,7 +25,7 @@ node-xray/
 
 ## Prerequisites
 
-- Node.js **>= 18.17** (CI runs 18.17, 20, 22).
+- Node.js **>= 20.18** (CI runs 20.18, 22.11, 24.x).
 - pnpm **>= 9** (`npm install -g pnpm`).
 - A POSIX-ish shell. The CI runs on Linux and Windows; commands here use the `pnpm` script names, which are shell-agnostic.
 

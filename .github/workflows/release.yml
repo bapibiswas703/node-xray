@@ -8,6 +8,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+
 jobs:
   release:
     name: release
@@ -21,12 +24,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.11.0'
+          node-version: '24.x'
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 

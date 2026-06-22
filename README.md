@@ -6,7 +6,7 @@
 
 [![npm](https://img.shields.io/npm/v/@node-xray/core)](https://www.npmjs.com/org/node-xray)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D18.17-brightgreen.svg)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%3E%3D20.18-brightgreen.svg)](https://nodejs.org)
 [![ci](https://github.com/bapibiswas703/node-xray/actions/workflows/ci.yml/badge.svg)](https://github.com/bapibiswas703/node-xray/actions/workflows/ci.yml)
 [![provenance](https://img.shields.io/badge/npm-provenance-success)](https://docs.npmjs.com/generating-provenance-statements)
 
@@ -56,7 +56,7 @@ npm install --save-dev @node-xray/fastify
 npm install --save-dev @node-xray/nestjs
 ```
 
-Peer requirements: Node.js `>=18.17`, Express `^4.19 || ^5`, Fastify `^4 || ^5`, NestJS `^10`.
+Peer requirements: Node.js `>=20.18`, Express `^4.19 || ^5`, Fastify `^4 || ^5`, NestJS `^10`.
 
 ## Quick start
 

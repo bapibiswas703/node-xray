@@ -6,7 +6,7 @@
 
 ## Prerequisites
 
-- Node.js **>= 18.17**
+- Node.js **>= 20.18**
 - One of: Express `^4.19 || ^5`, Fastify `^4 || ^5`, NestJS `^10`
 
 ## Express — JavaScript

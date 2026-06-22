@@ -251,7 +251,7 @@ The original is dropped before it ever reaches the store.
 - `eslint` flat config + `prettier` for style.
 - `husky` + `lint-staged` + `commitlint` for hygiene.
 - `@changesets/cli` for versioning.
-- `pnpm` workspaces, CI on Node 18.17, 20, 22 (Ubuntu + Windows).
+- `pnpm` workspaces, CI on Node 20.18, 22.11, 24.x (Ubuntu + Windows).
 - Release: a `Version Packages` PR is opened by changesets; on merge, a workflow publishes every changed package to npm with `--provenance`.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full developer guide.

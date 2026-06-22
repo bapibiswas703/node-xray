@@ -18,7 +18,7 @@ Each package has its own changelog. This file is the index. The per-package chan
 - Three runnable examples (`examples/express-demo`, `examples/fastify-demo`, `examples/nestjs-demo`) in both JavaScript and TypeScript.
 - Benchmark suite under `bench/` with `tinybench` and budget assertions.
 - Full documentation set under `docs/`.
-- CI on Node 18.17, 20, 22 (Ubuntu + Windows) covering typecheck, lint, test, build, and `bench:check`.
+- CI on Node 20.18, 22.11, 24.x (Ubuntu + Windows) covering typecheck, lint, test, build, and `bench:check`.
 - Changesets-based release pipeline with npm provenance.
 
 ### Security

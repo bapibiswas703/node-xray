@@ -19,7 +19,7 @@
   ],
   "sideEffects": false,
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=20.18.0"
   },
   "scripts": {
     "build": "tsup",
