@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { XRayOptions, SnapshotSide } from '@node-xray/types';
 import {
   createCore,
@@ -8,9 +10,22 @@ import {
   type Core,
   type SerializedError,
 } from '@node-xray/core';
+import { getAssetsDir } from '@node-xray/dashboard';
 
 const RECORD_ON_REQ = Symbol.for('@node-xray/fastify.record');
 const RESPONSE_BODY_FLAG = Symbol.for('@node-xray/fastify.response-body');
+
+/** Read the dashboard HTML from the `@node-xray/dashboard` package. */
+function loadDashboardHtml(dashboardPath: string): string {
+  try {
+    const raw = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    return raw
+      .replace(/__STYLES__/g, encodeURI(`${dashboardPath}/styles.css`))
+      .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
+  } catch {
+    return `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+  }
+}
 
 /**
  * Options for the Fastify plugin. In addition to the standard
@@ -92,7 +107,7 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
         }
         mountTarget = server;
         try {
-          core.mount(server);
+          core.mount(server, { assetsDir: getAssetsDir() });
           dashboardMounted = true;
         } catch (err) {
           core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -100,19 +115,22 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
       };
 
       // Dashboard HTML route. Registered before any user routes so
-      // it takes precedence over Fastify's 404 handler.
+      // it takes precedence over Fastify's 404 handler. The HTML is
+      // read from `@node-xray/dashboard`'s `assets/` directory on
+      // first hit and cached in memory.
       if (!skipDashboard) {
+        const cachedHtml = loadDashboardHtml(path);
         instance.get(path, (_req, reply) => {
           reply
             .header(
               'content-security-policy',
-              "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'",
+              "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'",
             )
             .header('x-content-type-options', 'nosniff')
             .header('referrer-policy', 'no-referrer')
             .header('cache-control', 'no-cache')
             .type('text/html; charset=utf-8')
-            .send(DASHBOARD_HTML);
+            .send(cachedHtml);
         });
       }
 
@@ -376,20 +394,6 @@ function splitPath(url: string): string {
   const i = url.indexOf('?');
   return i >= 0 ? url.slice(0, i) : url;
 }
-
-const DASHBOARD_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>node-xray</title>
-    <meta http-equiv="refresh" content="0; url=/node-xray/" />
-  </head>
-  <body>
-    <p>node-xray dashboard. Open <a href="/node-xray/">the dashboard</a>.</p>
-  </body>
-</html>
-`;
 
 function serializeError(err: unknown): SerializedError {
   if (err instanceof Error) {

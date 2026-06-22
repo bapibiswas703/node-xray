@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>node-xray dashboard</title>
+    <meta name="description" content="Live runtime inspector for Node.js HTTP servers." />
+    <link rel="stylesheet" href="__STYLES__" />
+  </head>
+  <body>
+    <div class="xr" id="xr-root" role="application" aria-label="node-xray dashboard">
+      <div class="topbar">
+        <div class="logo">
+          <span class="ring-spin" aria-hidden="true">◉</span>
+          <span>node-xray</span>
+        </div>
+        <span class="sep" aria-hidden="true">|</span>
+        <div class="live-dot" id="live-dot" aria-hidden="true"></div>
+        <span class="tb-host" id="tb-host">connecting…</span>
+        <div class="tb-right">
+          <span>reqs: <span class="tb-val" id="rc">0</span></span>
+          <span>avg: <span class="tb-val" id="avgms">—</span></span>
+          <span>lag: <span class="tb-ok" id="llg">—</span></span>
+          <span class="pill pill-live" id="conn-pill">● connecting</span>
+        </div>
+      </div>
+
+      <div class="body-split">
+        <aside class="sidebar" aria-label="Recent requests">
+          <div class="s-hdr">requests</div>
+          <div class="filter-bar" role="tablist">
+            <button class="fb on" data-filter="all" type="button">all</button>
+            <button class="fb" data-filter="2xx" type="button">2xx</button>
+            <button class="fb" data-filter="4xx" type="button">4xx</button>
+            <button class="fb" data-filter="5xx" type="button">5xx</button>
+            <button class="fb" data-filter="err" type="button">err</button>
+            <button class="fb" data-filter="slow" type="button">&gt;50ms</button>
+          </div>
+          <div id="req-list"></div>
+        </aside>
+
+        <main class="main" aria-label="Request detail">
+          <div class="selected-req-label" id="sel-lbl">● no request selected</div>
+
+          <div class="tab-bar" role="tablist">
+            <div class="tab on" data-tab="runtime" role="tab" tabindex="0">Runtime</div>
+            <div class="tab" data-tab="bodies" role="tab" tabindex="0">Request / Response</div>
+          </div>
+
+          <section class="tab-content on" id="tab-runtime" role="tabpanel">
+            <div class="panels-top">
+              <div class="panel p-call">
+                <div class="p-hdr">
+                  <span>Call stack</span>
+                  <span
+                    style="
+                      font-size: 8px;
+                      background: #1e0f36;
+                      color: #c4b5fd;
+                      padding: 1px 6px;
+                      border-radius: 8px;
+                    "
+                    >LIFO</span
+                  >
+                </div>
+                <div class="p-body" id="stack-panel"></div>
+              </div>
+              <div class="panel p-api">
+                <div class="p-hdr">
+                  <span>Node APIs — libuv</span>
+                  <span style="font-size: 9px; color: #7c3aed" id="thread-lbl">0/0 threads</span>
+                </div>
+                <div class="p-body">
+                  <div class="api-chips" id="api-panel"></div>
+                  <div class="threads-row" id="thread-viz" style="margin-top: 7px"></div>
+                  <div
+                    style="font-size: 8px; color: #3d4466; margin-top: 3px"
+                    id="thread-sub"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mid-row">
+              <div class="el-box" id="loop-box">
+                <div class="el-lbl">Event Loop</div>
+                <div class="ring go" id="loop-ring">
+                  <span class="ring-spin" aria-hidden="true">↻</span>
+                </div>
+                <div class="el-phase" id="lp-name">—</div>
+                <div class="el-sub" id="lp-sub">awaiting telemetry</div>
+              </div>
+              <div class="queues">
+                <div class="q-box q-macro">
+                  <div class="q-lbl qmc">
+                    <span>Task queue (macrotask)</span>
+                    <span class="fifo fmac">FIFO</span>
+                  </div>
+                  <div id="tq-body"></div>
+                </div>
+                <div class="q-box q-micro">
+                  <div class="q-lbl qmi">
+                    <span>Microtask queue</span>
+                    <span class="fifo fmic">FIFO</span>
+                  </div>
+                  <div id="mq-body"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="waterfall-sec">
+              <div class="waterfall-hdr">async waterfall</div>
+              <div id="waterfall"></div>
+            </div>
+
+            <div class="tl-sec">
+              <div class="tl-hdr" id="tl-hdr">request timeline</div>
+              <div class="tl-track">
+                <div class="tl-vline" aria-hidden="true"></div>
+                <div id="tl-body"></div>
+              </div>
+            </div>
+
+            <div class="async-sec">
+              <div class="async-hdr">async operations</div>
+              <div class="async-grid" id="async-grid"></div>
+            </div>
+          </section>
+
+          <section class="tab-content" id="tab-bodies" role="tabpanel">
+            <div class="body-inspector">
+              <div class="bi-panel bi-req">
+                <div class="bi-hdr">
+                  <span>↑ Request body</span>
+                  <div style="display: flex; gap: 6px; align-items: center">
+                    <span class="bi-size" id="req-size"></span>
+                    <button class="copy-btn" data-copy="req-json-raw" type="button">copy</button>
+                  </div>
+                </div>
+                <div class="bi-meta" id="req-meta"></div>
+                <div class="headers-section">
+                  <div
+                    style="
+                      padding: 4px 10px;
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 9px;
+                        color: #3d4466;
+                        letter-spacing: 0.06em;
+                        text-transform: uppercase;
+                      "
+                      >Headers</span
+                    >
+                    <button class="headers-toggle" data-toggle="req-headers" type="button">
+                      show
+                    </button>
+                  </div>
+                  <div id="req-headers" class="headers-block" style="display: none"></div>
+                </div>
+                <div class="json-wrap" id="req-json-display"></div>
+                <span id="req-json-raw" style="display: none"></span>
+              </div>
+
+              <div class="bi-panel bi-res">
+                <div class="bi-hdr">
+                  <span>↓ Response body</span>
+                  <div style="display: flex; gap: 6px; align-items: center">
+                    <span class="bi-size" id="res-size"></span>
+                    <button class="copy-btn" data-copy="res-json-raw" type="button">copy</button>
+                  </div>
+                </div>
+                <div class="bi-meta" id="res-meta"></div>
+                <div class="headers-section">
+                  <div
+                    style="
+                      padding: 4px 10px;
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 9px;
+                        color: #3d4466;
+                        letter-spacing: 0.06em;
+                        text-transform: uppercase;
+                      "
+                      >Headers</span
+                    >
+                    <button class="headers-toggle" data-toggle="res-headers" type="button">
+                      show
+                    </button>
+                  </div>
+                  <div id="res-headers" class="headers-block" style="display: none"></div>
+                </div>
+                <div class="json-wrap" id="res-json-display"></div>
+                <span id="res-json-raw" style="display: none"></span>
+              </div>
+            </div>
+          </section>
+
+          <div class="statbar" aria-label="Aggregate stats">
+            <div class="sc">
+              <div class="sv" id="st-tot">0</div>
+              <div class="sl">total</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #34d399" id="st-ok">0</div>
+              <div class="sl">2xx</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #f87171" id="st-err">0</div>
+              <div class="sl">errors</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #a5b4fc" id="st-avg">—</div>
+              <div class="sl">avg</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #fbbf24" id="st-lag">—</div>
+              <div class="sl">loop lag</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #67e8f9" id="st-pool">0/0</div>
+              <div class="sl">thread pool</div>
+            </div>
+            <div class="sc">
+              <div class="sv" style="color: #f0abfc" id="st-drop">0</div>
+              <div class="sl">dropped</div>
+            </div>
+          </div>
+
+          <div class="ctrlbar">
+            <button class="cb on" id="btn-live" type="button">⏸ pause</button>
+            <button class="cb" id="btn-clear" type="button">🗑 clear</button>
+            <div class="ml">
+              <span class="flbl">sort:</span>
+              <button class="cb on" data-sort="time" type="button">newest</button>
+              <button class="cb" data-sort="dur" type="button">slowest</button>
+              <button class="cb" data-sort="err" type="button">errors first</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="__APP__" defer></script>
+  </body>
+</html>

@@ -22,8 +22,12 @@ export interface Core {
   readonly options: ResolvedOptions;
   /** The in-memory store. */
   readonly store: RequestStore;
-  /** Start the WebSocket hub on a Node `http.Server`. */
-  mount(server: HttpServer): void;
+  /**
+   * Start the WebSocket hub and (optionally) the dashboard UI on a
+   * Node `http.Server`. Pass `assetsDir` to enable the dashboard
+   * route; without it the route returns a 503 placeholder.
+   */
+  mount(server: HttpServer, options?: { assetsDir?: string }): void;
   /** Stop everything (loop monitor, hub, store). */
   close(): Promise<void>;
   /** Internal helpers used by adapters. */
@@ -177,13 +181,14 @@ export function createCore(options: XRayOptions = {}): Core {
   return {
     options: resolved,
     store,
-    mount(server) {
+    mount(server, opts) {
       if (mounted) {
         throw new XRayConfigError('core.mount() called twice on the same instance.');
       }
       mounted = true;
       mountDashboard(server, (s) => hub.attach(s), {
         path: resolved.path,
+        ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}),
         ...(resolved.auth ? { auth: resolved.auth } : {}),
       });
     },

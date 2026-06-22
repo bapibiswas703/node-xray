@@ -124,6 +124,9 @@ importers:
       '@node-xray/core':
         specifier: workspace:*
         version: link:../core
+      '@node-xray/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@node-xray/types':
         specifier: workspace:*
         version: link:../types
@@ -161,11 +164,14 @@ importers:
       '@node-xray/core':
         specifier: workspace:*
         version: link:../core
+      '@node-xray/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@node-xray/types':
         specifier: workspace:*
         version: link:../types
       fastify-plugin:
-        specifier: ^5.0.0
+        specifier: ^5.0.1
         version: 5.1.0
     devDependencies:
       '@vitest/coverage-v8':
@@ -192,6 +198,9 @@ importers:
       '@node-xray/core':
         specifier: workspace:*
         version: link:../core
+      '@node-xray/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@node-xray/types':
         specifier: workspace:*
         version: link:../types
