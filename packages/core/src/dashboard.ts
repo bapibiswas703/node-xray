@@ -16,7 +16,17 @@ export interface MountOptions {
   assetsDir?: string;
   /** Allow origins for the WebSocket upgrade. Defaults to same-host. */
   allowOrigins?: readonly string[] | 'all' | 'same-host';
+  /**
+   * Sink for unexpected internal errors (e.g. a custom auth
+   * `verify` that threw). Defaults to `console.error` with a
+   * `[node-xray]` prefix. Must not throw.
+   */
+  onError?: (err: Error, ctx: unknown) => void;
 }
+
+const DEFAULT_ON_ERROR = (err: Error): void => {
+  console.error('[node-xray]', err.message, err.stack);
+};
 
 const PLACEHOLDER_HTML = `<!doctype html>
 <html lang="en">
@@ -84,33 +94,89 @@ export function mountDashboard(
     }
   }
 
+  // Auth check helper used by every dashboard route. On a positive
+  // result the response headers are set and `true` is returned;
+  // on a negative result the response is short-circuited with a
+  // 401/500 and `false` is returned. Exceptions from a custom
+  // `verify` are funneled through `onError` and translated into a
+  // 500 — never propagated as unhandled rejections.
+  const onError = options.onError ?? DEFAULT_ON_ERROR;
+  const authorize = async (
+    req: IncomingMessage,
+    _res: ServerResponse,
+    sendStatus: (code: number, body: string) => void,
+  ): Promise<boolean> => {
+    if (!options.auth) return true;
+    try {
+      const ok = await runAuth(req, options.auth);
+      if (ok) return true;
+      sendStatus(401, 'Unauthorized');
+      return false;
+    } catch (err) {
+      onError(err instanceof Error ? err : new Error(String(err)), {
+        url: req.url ?? '/',
+        method: req.method ?? 'GET',
+      });
+      sendStatus(500, 'Internal Server Error');
+      return false;
+    }
+  };
+
+  // Capture the onError once so each handler doesn't reach into
+  // `options` again (keeps the type narrowing straightforward).
+  const reportError = onError;
+
   server.on('request', (req: IncomingMessage, res: ServerResponse) => {
     if (!req.url) return;
     const url = req.url.split('?')[0] ?? '';
 
     // Root + canonical index: serve the SPA shell.
     if (url === path || url === `${path}/` || url === `${path}/index.html`) {
-      const html = cached ? replaceTokens(cached.indexHtml, path) : placeholderFor(path);
-      applySecurityHeaders(res, hasAssets && cached !== null);
-      res.statusCode = cached ? 200 : 503;
-      res.setHeader('content-type', 'text/html; charset=utf-8');
-      res.setHeader('cache-control', 'no-cache');
-      res.end(html);
+      const noAuth = !options.auth;
+      const sendHtml = (): void => {
+        const html = cached ? replaceTokens(cached.indexHtml, path) : placeholderFor(path);
+        applySecurityHeaders(res, hasAssets && cached !== null);
+        res.statusCode = cached ? 200 : 503;
+        res.setHeader('content-type', 'text/html; charset=utf-8');
+        res.setHeader('cache-control', 'no-cache');
+        res.end(html);
+      };
+      if (noAuth) {
+        sendHtml();
+        return;
+      }
+      void authorize(req, res, (code, body) => {
+        res.statusCode = code;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.setHeader('www-authenticate', 'Basic realm="node-xray"');
+        res.end(body);
+      }).then((ok) => {
+        if (ok) sendHtml();
+      });
       return;
     }
 
-    // Primary static assets.
-    if (url === `${path}/app.js`) {
-      sendAsset(res, assetsDir, 'app.js');
-      return;
-    }
-    if (url === `${path}/styles.css`) {
-      sendAsset(res, assetsDir, 'styles.css');
-      return;
-    }
-    if (url.startsWith(`${path}/assets/`)) {
-      const rel = url.slice(`${path}/assets/`.length);
-      sendAsset(res, assetsDir, rel);
+    // Primary static assets — also require auth so the JS / CSS
+    // are not served to anonymous clients.
+    if (
+      url === `${path}/app.js` ||
+      url === `${path}/styles.css` ||
+      url.startsWith(`${path}/assets/`)
+    ) {
+      const rel =
+        url === `${path}/app.js`
+          ? 'app.js'
+          : url === `${path}/styles.css`
+            ? 'styles.css'
+            : url.slice(`${path}/assets/`.length);
+      void authorize(req, res, (code, body) => {
+        res.statusCode = code;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end(body);
+      }).then((ok) => {
+        if (!ok) return;
+        sendAsset(res, assetsDir, rel);
+      });
       return;
     }
   });
@@ -151,9 +217,19 @@ export function mountDashboard(
           (l as (req: IncomingMessage, socket: Duplex, head: Buffer) => void)(req, socket, head);
         }
       } catch (err) {
-        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
-        socket.destroy();
-        throw err;
+        // Funnel unexpected errors through the configured onError so
+        // they surface in observability without crashing the process
+        // or leaking an unhandled rejection.
+        reportError(err instanceof Error ? err : new Error(String(err)), {
+          url: req.url ?? '/',
+          method: req.method ?? 'GET',
+        });
+        try {
+          socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+          socket.destroy();
+        } catch {
+          // The socket may already be destroyed; swallow.
+        }
       }
     })();
   });
@@ -215,14 +291,44 @@ function sendAsset(res: ServerResponse, dir: string | undefined, rel: string): v
   }
 }
 
-function applySecurityHeaders(res: ServerResponse, strict: boolean): void {
-  if (!strict) return;
+/**
+ * Single source of truth for the security headers that every
+ * dashboard HTML response must set. Adapters call this so the
+ * CSP / X-Content-Type-Options / Referrer-Policy are consistent
+ * across Express, Fastify, NestJS, and the core's own listener.
+ *
+ * The CSP allows:
+ *  - `script-src 'self'`: the dashboard loads `app.js` from the
+ *    same origin. No inline scripts, no eval, no third-party JS.
+ *  - `style-src 'self' 'unsafe-inline'`: the dashboard uses inline
+ *    `style="…"` attributes on dynamically-created nodes for
+ *    progress bars and color hints. The stylesheet itself comes
+ *    from the same origin.
+ *  - `connect-src 'self' ws: wss:`: the WebSocket client opens
+ *    back to the same origin.
+ *  - `img-src 'self' data:`: placeholder avatars / status icons
+ *    may be inline `data:` URIs.
+ *  - `default-src 'self'`: everything else must come from the
+ *    same origin.
+ *  - `form-action 'none'`, `base-uri 'none'`,
+ *    `frame-ancestors 'none'`: belt-and-braces; the dashboard
+ *    has no forms, no <base>, and must never be embeddable.
+ */
+export function applyDashboardSecurityHeaders(res: ServerResponse): void {
   res.setHeader(
     'content-security-policy',
-    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'",
+    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
   );
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('referrer-policy', 'no-referrer');
+  res.setHeader('x-frame-options', 'DENY');
+  res.setHeader('cross-origin-opener-policy', 'same-origin');
+  res.setHeader('cross-origin-resource-policy', 'same-origin');
+}
+
+function applySecurityHeaders(res: ServerResponse, strict: boolean): void {
+  if (!strict) return;
+  applyDashboardSecurityHeaders(res);
 }
 
 function checkOrigin(

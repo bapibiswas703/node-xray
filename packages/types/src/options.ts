@@ -53,15 +53,20 @@ export interface XRayOptions {
 
   /**
    * Header names (case-insensitive) whose values are replaced with
-   * `'[REDACTED]'`. Merged with the default deny list.
+   * `'[REDACTED]'`. Merged with the default deny list. Set to
+   * `false` to disable the default deny list entirely.
    */
-  redactHeaders?: readonly string[];
+  redactHeaders?: readonly string[] | false;
 
   /**
    * JSON-path-style expressions for body field redaction. See
    * `docs/SECURITY.md` for the supported syntax.
+   *
+   * Set to `false` to disable the default deny list entirely and
+   * capture bodies verbatim. Only do this in trusted environments
+   * (e.g. local dev with no shared dashboard).
    */
-  redactBodyPaths?: readonly string[];
+  redactBodyPaths?: readonly string[] | false;
 
   /**
    * Fraction of requests to record. 0..1.

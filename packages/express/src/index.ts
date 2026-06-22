@@ -3,7 +3,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
 import type { XRayOptions, SnapshotSide } from '@node-xray/types';
-import { createCore, redactHeaders, type Core, type SerializedError } from '@node-xray/core';
+import {
+  createCore,
+  redactHeaders,
+  applyDashboardSecurityHeaders,
+  type Core,
+  type SerializedError,
+} from '@node-xray/core';
 import { getAssetsDir } from '@node-xray/dashboard';
 
 const RECORD_ON_REQ = Symbol.for('@node-xray/express.record');
@@ -135,6 +141,7 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     const dashboardPath = core.options.path;
     if (req.path === dashboardPath || req.path === `${dashboardPath}/`) {
       const html = loadIndexHtml(dashboardPath);
+      applyDashboardSecurityHeaders(res);
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.setHeader('cache-control', 'no-cache');
       res.statusCode = 200;

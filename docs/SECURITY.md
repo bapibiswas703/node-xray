@@ -28,27 +28,58 @@ The threats we explicitly do **not** defend against:
 By default, the following headers are redacted from both request and response snapshots:
 
 - `authorization`
+- `proxy-authorization`
+- `www-authenticate`
+- `proxy-authenticate`
 - `cookie`
 - `set-cookie`
+- `cookie2`
 - `x-api-key`
-- `proxy-authorization`
+- `x-auth-token`
+- `x-access-token`
+- `x-refresh-token`
+- `x-id-token`
+- `x-session-id`
+- `x-csrf-token`
+- `x-xsrf-token`
 
 The list is case-insensitive and merged with whatever you pass in `redactHeaders`. Redacted values are replaced with the literal string `'[REDACTED]'` (8 characters), regardless of original length. This avoids length-based side channels.
 
+To disable the default deny list entirely (for example, in a fully trusted local debugging session), pass `redactHeaders: false`:
+
+```ts
+xray({ redactHeaders: false }); // captures every header verbatim
+```
+
+The same flag works for bodies (`redactBodyPaths: false`). Use both with care.
+
 ### Bodies — path-based
 
-The redactor walks parsed JSON bodies and replaces values at configured paths. The default paths:
+The redactor walks parsed JSON bodies and replaces values at configured paths. The default paths cover credentials (both naming conventions), payment data, and the most common PII fields:
 
-| Path           | Matches                             |
-| -------------- | ----------------------------------- |
-| `password`     | top-level `password`                |
-| `token`        | top-level `token`                   |
-| `secret`       | top-level `secret`                  |
-| `apiKey`       | top-level `apiKey`                  |
-| `*.password`   | any nested `password`               |
-| `*.token`      | any nested `token`                  |
-| `*.secret`     | any nested `secret`                 |
-| `cards[*].cvv` | `cvv` inside any `cards` array item |
+| Path                             | Matches                             |
+| -------------------------------- | ----------------------------------- |
+| `password`                       | top-level `password`                |
+| `passwd`                         | top-level `passwd`                  |
+| `pwd`                            | top-level `pwd`                     |
+| `token`                          | top-level `token`                   |
+| `secret`                         | top-level `secret`                  |
+| `apiKey`                         | top-level `apiKey`                  |
+| `api_key`                        | top-level `api_key`                 |
+| `accessToken` / `access_token`   | top-level access token              |
+| `refreshToken` / `refresh_token` | top-level refresh token             |
+| `idToken` / `id_token`           | top-level id token                  |
+| `sessionId` / `session_id`       | top-level session id                |
+| `authorization`                  | top-level `authorization`           |
+| `privateKey` / `private_key`     | top-level private key               |
+| `cvv`                            | top-level `cvv`                     |
+| `pin`                            | top-level `pin`                     |
+| `creditCard` / `credit_card`     | top-level credit card               |
+| `cards[*].cvv`                   | `cvv` inside any `cards` array item |
+| `cards[*].pin`                   | `pin` inside any `cards` array item |
+| `ssn`                            | top-level `ssn`                     |
+| `phone`                          | top-level `phone`                   |
+| `*.password` … `*.phone`         | any of the above at any depth       |
 
 Replacement value: the literal string `'[REDACTED]'`.
 
@@ -126,19 +157,33 @@ The WebSocket upgrade checks the `Origin` header against an allowlist. The defau
 
 In dev, anything goes. In production with `auth`, the origin must match the allowlist **and** the auth check must pass. Either failure closes the upgrade with code `1008`.
 
+### HTTP dashboard endpoint also requires auth
+
+As of v1.0, the **HTTP** dashboard endpoint (`/node-xray/`, `/node-xray/app.js`, `/node-xray/styles.css`, `/node-xray/assets/*`) enforces the same `auth` block as the WebSocket upgrade. An unauthenticated request gets `401 Unauthorized` with a `WWW-Authenticate: Basic` header. Custom-verify exceptions are caught and translated to `500 Internal Server Error`; the original error is reported through the configured `onError` sink (default: `console.error`) and never becomes an unhandled rejection.
+
+Password / token comparisons are **constant-time** to avoid timing side channels. The redactor's overall request capture is **not** side-channel safe — the timing of the redactor depends on the structure of the body.
+
 ## Content Security Policy
 
-The dashboard sets the following response headers:
+The dashboard sets the following response headers on every HTML, JS, and CSS response:
 
 ```
-Content-Security-Policy: default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'
+Content-Security-Policy: default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'
 X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
 Referrer-Policy: no-referrer
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
 ```
 
-The `'unsafe-inline'` for styles is required by the v4.1 design (inline `<style>` blocks for theme variables). This is tracked as a known issue on the roadmap. Scripts are strictly same-origin.
+Notes on the directives:
 
-If you need to lock this down further, put the dashboard behind a CDN that strips headers and apply your own CSP there.
+- `'unsafe-inline'` is allowed for `style-src` because the dashboard uses inline `style="…"` attributes for progress bars and color hints. The stylesheet itself is loaded from the same origin (`__STYLES__`).
+- `script-src 'self'` (no `'unsafe-inline'`) is strict. The dashboard ships one same-origin script (`__APP__`) and does not use `eval`, `new Function`, or `innerHTML` to render untrusted data.
+- `form-action 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, and `X-Frame-Options: DENY` together prevent the dashboard from being framed, used as a form target, or as a `<base>` reference — the dashboard has none of those features.
+- `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Resource-Policy: same-origin` isolate the dashboard from cross-origin windows and prevent other origins from embedding its resources.
+
+If you need to lock this down further, put the dashboard behind a reverse proxy that strips headers and apply your own CSP there.
 
 ## Reporting a vulnerability
 

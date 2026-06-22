@@ -190,6 +190,7 @@ export function createCore(options: XRayOptions = {}): Core {
         path: resolved.path,
         ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}),
         ...(resolved.auth ? { auth: resolved.auth } : {}),
+        onError: resolved.onError,
       });
     },
     async close() {

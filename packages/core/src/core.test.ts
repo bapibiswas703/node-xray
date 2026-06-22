@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server as HttpServer } from 'node:http';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { createCore } from './core.js';
 import { _clearAllForTest } from './events.js';
 
@@ -111,20 +111,19 @@ describe('createCore', () => {
 
     const get = (path: string): Promise<{ status: number; body: string; type: string }> =>
       new Promise((resolve, reject) => {
-        const http = require('node:http') as typeof import('node:http');
-        http
-          .get(`${baseUrl}${path}`, (res) => {
-            const chunks: Buffer[] = [];
-            res.on('data', (c) => chunks.push(c));
-            res.on('end', () =>
-              resolve({
-                status: res.statusCode ?? 0,
-                body: Buffer.concat(chunks).toString('utf-8'),
-                type: String(res.headers['content-type'] ?? ''),
-              }),
-            );
-          })
-          .on('error', reject);
+        const req = httpRequest(`${baseUrl}${path}`, { method: 'GET' }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              body: Buffer.concat(chunks).toString('utf-8'),
+              type: String(res.headers['content-type'] ?? ''),
+            }),
+          );
+        });
+        req.on('error', reject);
+        req.end();
       });
 
     it('serves the dashboard HTML when the assets directory is provided', async () => {
@@ -165,6 +164,148 @@ describe('createCore', () => {
       // the index.html cannot be read.
       expect([200, 503]).toContain(res.status);
       expect(res.body).toMatch(/node-xray/);
+      await core.close();
+    });
+  });
+
+  describe('auth on the HTTP dashboard endpoint', () => {
+    let dir: string;
+    let server: HttpServer;
+    let baseUrl: string;
+
+    afterEach(async () => {
+      if (server && server.listening) {
+        await new Promise<void>((r) => server.close(() => r()));
+      }
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    const setupAssets = async (): Promise<void> => {
+      dir = mkdtempSync(join(tmpdir(), 'xray-core-'));
+      writeFileSync(join(dir, 'index.html'), '<!doctype html><title>x</title>');
+      writeFileSync(join(dir, 'app.js'), 'window.x = 1;');
+      writeFileSync(join(dir, 'styles.css'), '.x { color: red; }');
+      server = createServer();
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const { address, port } = server.address() as { address: string; port: number };
+      baseUrl = `http://${address}:${port}`;
+    };
+
+    const rawGet = (
+      path: string,
+      headers: Record<string, string> = {},
+    ): Promise<{
+      status: number;
+      body: string;
+      headers: Record<string, string | string[] | undefined>;
+    }> =>
+      new Promise((resolve, reject) => {
+        const req = httpRequest(`${baseUrl}${path}`, { method: 'GET', headers }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              body: Buffer.concat(chunks).toString('utf-8'),
+              headers: res.headers as Record<string, string | string[] | undefined>,
+            }),
+          );
+        });
+        req.on('error', reject);
+        req.end();
+      });
+
+    const auth = (user: string, pass: string): string =>
+      'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+
+    it('rejects unauthenticated requests to the dashboard HTML with 401', async () => {
+      await setupAssets();
+      const core = createCore({
+        path: '/x',
+        auth: { type: 'basic', user: 'admin', pass: 'secret' },
+      });
+      core.mount(server, { assetsDir: dir });
+      const res = await rawGet('/x/');
+      expect(res.status).toBe(401);
+      expect(res.headers['www-authenticate']).toMatch(/Basic/);
+      await core.close();
+    });
+
+    it('rejects unauthenticated requests to /app.js with 401', async () => {
+      await setupAssets();
+      const core = createCore({
+        path: '/x',
+        auth: { type: 'basic', user: 'admin', pass: 'secret' },
+      });
+      core.mount(server, { assetsDir: dir });
+      const res = await rawGet('/x/app.js');
+      expect(res.status).toBe(401);
+      await core.close();
+    });
+
+    it('serves the dashboard HTML and assets on a valid Basic credential', async () => {
+      await setupAssets();
+      const core = createCore({
+        path: '/x',
+        auth: { type: 'basic', user: 'admin', pass: 'secret' },
+      });
+      core.mount(server, { assetsDir: dir });
+      const html = await rawGet('/x/', { authorization: auth('admin', 'secret') });
+      expect(html.status).toBe(200);
+      expect(html.body).toContain('<!doctype html>');
+      const js = await rawGet('/x/app.js', { authorization: auth('admin', 'secret') });
+      expect(js.status).toBe(200);
+      await core.close();
+    });
+
+    it('rejects a wrong password with 401 (no information leak)', async () => {
+      await setupAssets();
+      const core = createCore({
+        path: '/x',
+        auth: { type: 'basic', user: 'admin', pass: 'secret' },
+      });
+      core.mount(server, { assetsDir: dir });
+      const res = await rawGet('/x/', { authorization: auth('admin', 'wrong') });
+      expect(res.status).toBe(401);
+      // The 401 must include a `WWW-Authenticate: Basic` header.
+      expect(res.headers['www-authenticate']).toMatch(/Basic/);
+      await core.close();
+    });
+
+    it('serves a Bearer token in the Authorization header', async () => {
+      await setupAssets();
+      const core = createCore({
+        path: '/x',
+        auth: { type: 'bearer', token: 'sk_test_42' },
+      });
+      core.mount(server, { assetsDir: dir });
+      const ok = await rawGet('/x/', { authorization: 'Bearer sk_test_42' });
+      expect(ok.status).toBe(200);
+      const wrong = await rawGet('/x/', { authorization: 'Bearer sk_test_99' });
+      expect(wrong.status).toBe(401);
+      await core.close();
+    });
+
+    it('funnels custom-verify exceptions through onError and returns 500', async () => {
+      await setupAssets();
+      const errors: unknown[] = [];
+      const core = createCore({
+        path: '/x',
+        onError: (err) => errors.push(err),
+        auth: {
+          type: 'custom',
+          verify: () => {
+            throw new Error('boom');
+          },
+        },
+      });
+      core.mount(server, { assetsDir: dir });
+      const res = await rawGet('/x/');
+      expect(res.status).toBe(500);
+      // The error must surface through onError, NOT as an unhandled
+      // rejection (which would fail the test).
+      expect(errors).toHaveLength(1);
+      expect((errors[0] as Error).message).toBe('boom');
       await core.close();
     });
   });

@@ -1,0 +1,20 @@
+{
+  "name": "@node-xray/bench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "node-xray throughput / latency benchmark (excluded from publish)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "bench": "node --import tsx ./src/index.ts"
+  },
+  "dependencies": {
+    "@node-xray/express": "workspace:*",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.19.0",
+    "tsx": "^4.19.0"
+  }
+}

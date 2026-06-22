@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tap, catchError, throwError, EMPTY, type Observable } from 'rxjs';
 import type { Core, SerializedError } from '@node-xray/core';
-import { redactHeaders, redactSnapshot } from '@node-xray/core';
+import { redactHeaders, redactSnapshot, applyDashboardSecurityHeaders } from '@node-xray/core';
 import { getAssetsDir } from '@node-xray/dashboard';
 import type { XRayRequest, XRayResponse } from './types.js';
 import { XRAY_REQUEST_KEY, XRAY_RESPONSE_KEY } from './symbols.js';
@@ -201,14 +201,11 @@ export class XrayInterceptor implements NestInterceptor {
                 res.set?.(n, v);
               }
             };
+            applyDashboardSecurityHeaders(
+              res as unknown as Parameters<typeof applyDashboardSecurityHeaders>[0],
+            );
             setHeader('content-type', 'text/html; charset=utf-8');
             setHeader('cache-control', 'no-cache');
-            setHeader(
-              'content-security-policy',
-              "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'",
-            );
-            setHeader('x-content-type-options', 'nosniff');
-            setHeader('referrer-policy', 'no-referrer');
             const html = loadDashboardHtml(dashboardPath);
             if (res.send) {
               res.send(html);
@@ -360,14 +357,11 @@ function respondDashboard(response: DashboardResponse, path: string): void {
       response.set?.(name, value);
     }
   };
+  applyDashboardSecurityHeaders(
+    response as unknown as Parameters<typeof applyDashboardSecurityHeaders>[0],
+  );
   setHeader('content-type', 'text/html; charset=utf-8');
   setHeader('cache-control', 'no-cache');
-  setHeader(
-    'content-security-policy',
-    "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'",
-  );
-  setHeader('x-content-type-options', 'nosniff');
-  setHeader('referrer-policy', 'no-referrer');
   response.statusCode = 200;
   // Prefer Express-style `.send()` (handles 304, content-length, etc.);
   // fall back to raw `end()` for Fastify's raw response.

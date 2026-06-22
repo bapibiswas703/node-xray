@@ -72,6 +72,88 @@ describe('resolveOptions', () => {
     expect(r.redactBodyPaths).toContain('*.ssn');
   });
 
+  describe('default redaction deny list', () => {
+    it('redacts every common auth / session header by default', () => {
+      const r = resolveOptions();
+      for (const name of [
+        'authorization',
+        'proxy-authorization',
+        'www-authenticate',
+        'proxy-authenticate',
+        'cookie',
+        'set-cookie',
+        'cookie2',
+        'x-api-key',
+        'x-auth-token',
+        'x-access-token',
+        'x-refresh-token',
+        'x-id-token',
+        'x-session-id',
+        'x-csrf-token',
+        'x-xsrf-token',
+      ]) {
+        expect(r.redactHeaders.has(name), `${name} should be in default deny list`).toBe(true);
+      }
+    });
+
+    it('redacts every common credential / payment / PII body path by default', () => {
+      const r = resolveOptions();
+      for (const path of [
+        'password',
+        'passwd',
+        'pwd',
+        'token',
+        'secret',
+        'apiKey',
+        'api_key',
+        'accessToken',
+        'access_token',
+        'refreshToken',
+        'refresh_token',
+        'idToken',
+        'id_token',
+        'sessionId',
+        'session_id',
+        'authorization',
+        'privateKey',
+        'private_key',
+        'cvv',
+        'pin',
+        'creditCard',
+        'credit_card',
+        'cards[*].cvv',
+        'cards[*].pin',
+        'ssn',
+        'phone',
+        '*.password',
+        '*.token',
+        '*.ssn',
+        '*.phone',
+        '*.private_key',
+      ]) {
+        expect(r.redactBodyPaths.includes(path), `${path} should be in default deny list`).toBe(
+          true,
+        );
+      }
+    });
+
+    it('lets the user disable the default header deny list', () => {
+      const r = resolveOptions({ redactHeaders: false });
+      expect(r.redactHeaders.size).toBe(0);
+    });
+
+    it('lets the user disable the default body deny list', () => {
+      const r = resolveOptions({ redactBodyPaths: false });
+      expect(r.redactBodyPaths.length).toBe(0);
+    });
+
+    it('still merges user entries when defaults are present', () => {
+      const r = resolveOptions({ redactBodyPaths: ['*.drivers_license'] });
+      expect(r.redactBodyPaths).toContain('password');
+      expect(r.redactBodyPaths).toContain('*.drivers_license');
+    });
+  });
+
   it('clamps sampleRate to [0, 1]', () => {
     expect(resolveOptions({ sampleRate: 2 }).sampleRate).toBe(1);
     expect(resolveOptions({ sampleRate: -1 }).sampleRate).toBe(0);
