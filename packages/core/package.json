@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Core runtime engine for node-xray: async context, event store, loop monitor, WebSocket hub, redactor",
   "license": "MIT",
   "type": "module",
@@ -29,9 +29,11 @@
     "clean": "rimraf dist .turbo .tsup *.tsbuildinfo"
   },
   "dependencies": {
-    "@node-xray/types": "workspace:*"
+    "@node-xray/types": "workspace:*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.13",
     "rimraf": "^6.0.1",
     "tsup": "^8.3.5",
     "typescript": "^5.6.3",

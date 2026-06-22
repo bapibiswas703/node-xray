@@ -1,28 +1,61 @@
 /**
  * @node-xray/core
  *
- * Core runtime engine: async context, in-memory event store, event-loop
- * monitor, versioned WebSocket hub, and default-deny redactor.
- *
- * Full implementation lands in P1. The P0 stub exposes a placeholder
- * `version()` and a typed `XRayOptions` so downstream adapters can compile.
+ * Public API for the core runtime engine. The named export
+ * `createCore` is the factory adapters consume. The rest of the public
+ * surface is covered by the other named exports below.
  */
 
-import type { XRayOptions } from './types.js';
+export { createCore } from './core.js';
+export type { Core, CoreInternals, StartRequestInput, FinishRequestInput } from './core.js';
 
-export type { XRayOptions } from './types.js';
+export { resolveOptions } from './config.js';
+export type { ResolvedOptions } from './config.js';
 
-/**
- * Returns the package version.
- */
-export function version(): string {
-  return '0.1.0';
-}
+export { getContext, getContextOrThrow, withTags, withContext, runWithContext } from './context.js';
 
-/**
- * Placeholder no-op that validates the public option shape is importable.
- * Removed in P1 once the real `createCore(options)` lands.
- */
-export function _typecheck(options: XRayOptions): XRayOptions {
-  return options;
-}
+export { on, off, emit, listenerCount } from './events.js';
+
+export { startLoopMonitor, eventLoopUtilization, currentEventLoopPhase } from './loop.js';
+
+export { captureStack } from './stack.js';
+export type { CaptureOptions } from './stack.js';
+
+export { redactHeaders, redactBody, truncateBody, redactSnapshot } from './redact.js';
+export type { RedactOptions } from './redact.js';
+
+export { RequestStore, createPartialRecord, appendTimeline, appendAsyncOp } from './store.js';
+export type { StoreOptions } from './store.js';
+
+export { createHub, parseClientFrame } from './ws.js';
+export type { HubOptions, HubHandle, HelloConfigData, HelloServerData } from './ws.js';
+
+export { mountDashboard } from './dashboard.js';
+export type { MountOptions } from './dashboard.js';
+
+export {
+  XRayError,
+  XRayNoContextError,
+  XRayConfigError,
+  XRayWireError,
+  XRayStoreFullError,
+} from './errors.js';
+
+export type {
+  XRayOptions,
+  XRayContext,
+  RequestRecord,
+  TimelineEntry,
+  TimelineKind,
+  AsyncOp,
+  AsyncOpKind,
+  SerializedError,
+  SnapshotSide,
+  LoopStats,
+  EventLoopPhase,
+  WireFrame,
+  XRayEventName,
+  XRayEventPayload,
+} from '@node-xray/types';
+
+export { WIRE_VERSION, VERSION } from '@node-xray/types';
