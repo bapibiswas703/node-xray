@@ -16,9 +16,9 @@ node-xray/
 │   ├── fastify/      # @node-xray/fastify
 │   ├── nestjs/       # @node-xray/nestjs
 │   ├── dashboard/    # @node-xray/dashboard
-│   └── types/        # @node-xray/types
-├── examples/         # express-demo, fastify-demo, nestjs-demo
-├── bench/            # tinybench scripts and budget assertions
+│   ├── types/        # @node-xray/types
+│   └── bench/        # pnpm bench (perf comparison)
+├── examples/         # express-basic, fastify-basic, nestjs-basic
 ├── docs/             # user-facing documentation
 └── .changeset/       # changesets (one per PR)
 ```
@@ -45,20 +45,20 @@ If `pnpm test` is green on your machine, you are ready.
 
 The root `package.json` is a thin orchestrator. All commands are also runnable inside a package directory.
 
-| Command              | What it does                                      |
-| -------------------- | ------------------------------------------------- |
-| `pnpm -r build`      | Build every package (tsup, ESM + CJS + dts)       |
-| `pnpm -r typecheck`  | `tsc --noEmit` per package, strict mode           |
-| `pnpm -r lint`       | `eslint` per package, flat config                 |
-| `pnpm -r test`       | `vitest run` per package                          |
-| `pnpm -r test:watch` | `vitest` in watch mode                            |
-| `pnpm bench`         | Run all benchmark scripts                         |
-| `pnpm bench:check`   | Same, with budget assertions (CI mode)            |
-| `pnpm format`        | `prettier --write .`                              |
-| `pnpm format:check`  | `prettier --check .`                              |
-| `pnpm changeset`     | Open the changeset CLI to add a changeset         |
-| `pnpm version`       | Apply changesets, bump versions, write CHANGELOGs |
-| `pnpm release`       | Publish every changed package to npm              |
+| Command                 | What it does                                      |
+| ----------------------- | ------------------------------------------------- |
+| `pnpm -r build`         | Build every package (tsup, ESM + CJS + dts)       |
+| `pnpm -r typecheck`     | `tsc --noEmit` per package, strict mode           |
+| `pnpm lint`             | `eslint` flat config, `--max-warnings=0`          |
+| `pnpm -r test`          | `vitest run` per package                          |
+| `pnpm -r test:watch`    | `vitest` in watch mode                            |
+| `pnpm -r test:coverage` | `vitest run --coverage` per package               |
+| `pnpm bench`            | Run the perf comparison (Express with/without)    |
+| `pnpm format`           | `prettier --write .`                              |
+| `pnpm format:check`     | `prettier --check .`                              |
+| `pnpm changeset`        | Open the changeset CLI to add a changeset         |
+| `pnpm version`          | Apply changesets, bump versions, write CHANGELOGs |
+| `pnpm release`          | Publish every changed package to npm              |
 
 ## Development workflow
 
@@ -118,12 +118,12 @@ These are the rules the maintainers will check before merging. They exist becaus
 
 ## Benchmark discipline
 
-- Any change to the hot path (the request-finish path, the store, the WS frame dispatcher) must be accompanied by a `bench/` update.
-- The CI runs `pnpm bench:check`. A regression > 10% fails the build. If your change legitimately regresses, update the budget in `docs/PERFORMANCE.md` in the same PR, with justification.
-- The soak test (nightly) is not in the PR gate, but if you touch memory-management code, run it locally:
+- Any change to the hot path (the request-finish path, the store, the WS frame dispatcher) must be accompanied by a bench update.
+- `pnpm bench` runs the perf comparison (5000 requests with and without xray). Run it before and after a change to confirm the overhead is still bounded.
+- The express soak test (`packages/express/src/soak.test.ts`) runs 5 batches × 200 requests and asserts the ring buffer stays bounded and the heap doesn't grow. Run it locally if you touch memory-management code:
 
   ```bash
-  pnpm bench:soak -- --duration=10m
+  pnpm --filter @node-xray/express test -- soak
   ```
 
 ## Release process

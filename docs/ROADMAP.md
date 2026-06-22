@@ -27,7 +27,8 @@ The feature set:
 - Static dashboard with two tabs (Runtime, Request/Response) and the v4.1 visual design.
 - Configurable auth (basic, bearer, custom) for non-dev environments.
 - Refuse-to-mount in production without auth.
-- Three runnable examples (Express, Fastify, NestJS) in JS and TS.
+- Three runnable examples (Express, Fastify, NestJS) in TypeScript under `examples/`.
+- Performance bench (`pnpm bench`) and a soak test that bounds the ring buffer.
 - Full documentation set.
 
 ## v1.1 (next minor)
