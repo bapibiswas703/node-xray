@@ -12,5 +12,13 @@ export default defineConfig({
   test: {
     include: ['src/**/*.{test,spec}.ts'],
     testTimeout: 10_000,
+    server: {
+      deps: {
+        // The express adapter transitively imports `ws` through
+        // `@node-xray/core`'s source. Inline it so vitest's optimizer
+        // can resolve it without a separate install.
+        inline: [/(^|\/)ws($|\/)/, /^@node-xray\//],
+      },
+    },
   },
 });

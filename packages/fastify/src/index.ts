@@ -7,6 +7,7 @@ import {
   createCore,
   redactHeaders,
   redactSnapshot,
+  applyDashboardSecurityHeaders,
   type Core,
   type SerializedError,
 } from '@node-xray/core';
@@ -121,13 +122,8 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
       if (!skipDashboard) {
         const cachedHtml = loadDashboardHtml(path);
         instance.get(path, (_req, reply) => {
+          applyDashboardSecurityHeaders(reply.raw);
           reply
-            .header(
-              'content-security-policy',
-              "default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'",
-            )
-            .header('x-content-type-options', 'nosniff')
-            .header('referrer-policy', 'no-referrer')
             .header('cache-control', 'no-cache')
             .type('text/html; charset=utf-8')
             .send(cachedHtml);

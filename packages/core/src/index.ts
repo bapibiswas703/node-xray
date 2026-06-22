@@ -30,7 +30,7 @@ export type { StoreOptions } from './store.js';
 export { createHub, parseClientFrame } from './ws.js';
 export type { HubOptions, HubHandle, HelloConfigData, HelloServerData } from './ws.js';
 
-export { mountDashboard } from './dashboard.js';
+export { mountDashboard, applyDashboardSecurityHeaders } from './dashboard.js';
 export type { MountOptions } from './dashboard.js';
 
 export {

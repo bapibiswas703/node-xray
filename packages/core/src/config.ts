@@ -23,23 +23,92 @@ export interface ResolvedOptions {
   onError: (err: Error, ctx: unknown) => void;
 }
 
+/**
+ * Default HTTP headers to redact. These cover the credentials and
+ * session tokens that virtually every modern API exchanges. The
+ * list is matched case-insensitively; a user can extend it with
+ * `redactHeaders` in the options.
+ */
 const DEFAULT_REDACT_HEADERS: readonly string[] = [
+  // Standard auth
   'authorization',
+  'proxy-authorization',
+  'www-authenticate',
+  'proxy-authenticate',
+  // Cookies
   'cookie',
   'set-cookie',
+  'cookie2',
+  // API tokens
   'x-api-key',
-  'proxy-authorization',
+  'x-auth-token',
+  'x-access-token',
+  'x-refresh-token',
+  'x-id-token',
+  'x-session-id',
+  'x-csrf-token',
+  'x-xsrf-token',
 ];
 
+/**
+ * Default JSON paths to redact. The list covers the most common
+ * credential, payment, and personal-data fields. A user can extend
+ * it with `redactBodyPaths` in the options. The two common naming
+ * conventions (camelCase, snake_case) are both covered, and every
+ * entry is duplicated with a `*.foo` wildcard so it matches at any
+ * nesting level.
+ */
 const DEFAULT_REDACT_BODY_PATHS: readonly string[] = [
+  // Credentials
   'password',
+  'passwd',
+  'pwd',
   'token',
   'secret',
   'apiKey',
+  'api_key',
+  'accessToken',
+  'access_token',
+  'refreshToken',
+  'refresh_token',
+  'idToken',
+  'id_token',
+  'sessionId',
+  'session_id',
+  'authorization',
+  'privateKey',
+  'private_key',
+  // Wildcards for any depth
   '*.password',
+  '*.passwd',
+  '*.pwd',
   '*.token',
   '*.secret',
+  '*.apiKey',
+  '*.api_key',
+  '*.accessToken',
+  '*.access_token',
+  '*.refreshToken',
+  '*.refresh_token',
+  '*.idToken',
+  '*.id_token',
+  '*.sessionId',
+  '*.session_id',
+  '*.authorization',
+  '*.privateKey',
+  '*.private_key',
+  // Payment
+  'cvv',
+  'pin',
+  'creditCard',
+  'credit_card',
   'cards[*].cvv',
+  'cards[*].pin',
+  // PII
+  'ssn',
+  'phone',
+  '*.ssn',
+  '*.phone',
 ];
 
 const DEFAULT_IGNORE = (ctx: { path: string; method: string }): boolean => {
@@ -68,13 +137,22 @@ export function resolveOptions(options: XRayOptions = {}, mountPath?: string): R
 
   const enabled = options.enabled ?? !isProd;
 
+  // Redaction merge: defaults are applied unless the user passes
+  // `false` to opt out entirely. An array (including `[]`) is
+  // merged with the defaults; `undefined` falls back to defaults.
   const redactHeaders = new Set<string>(
-    [...DEFAULT_REDACT_HEADERS, ...(options.redactHeaders ?? [])].map((h) => h.toLowerCase()),
+    (options.redactHeaders === false
+      ? []
+      : [...DEFAULT_REDACT_HEADERS, ...(options.redactHeaders ?? [])]
+    ).map((h) => h.toLowerCase()),
   );
 
-  const redactBodyPaths = options.redactBodyPaths
-    ? [...DEFAULT_REDACT_BODY_PATHS, ...options.redactBodyPaths]
-    : DEFAULT_REDACT_BODY_PATHS;
+  const redactBodyPaths =
+    options.redactBodyPaths === false
+      ? []
+      : options.redactBodyPaths
+        ? [...DEFAULT_REDACT_BODY_PATHS, ...options.redactBodyPaths]
+        : DEFAULT_REDACT_BODY_PATHS;
 
   const stackEnabled = options.stack?.enabled ?? true;
   const stackRate = options.stack?.rate ?? 0.1;
