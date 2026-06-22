@@ -120,6 +120,16 @@ await app.listen(3000);
 
 Open <http://localhost:3000/node-xray>. The dashboard is live.
 
+## Examples
+
+Three runnable apps in [`examples/`](./examples), one per framework:
+
+- [`examples/express-basic`](./examples/express-basic) — `xray()` + error handler
+- [`examples/fastify-basic`](./examples/fastify-basic) — `xrayPlugin` with `fastify-plugin`
+- [`examples/nestjs-basic`](./examples/nestjs-basic) — `NodeXrayModule.register` + global interceptor
+
+Each one is ~50 lines of code, type-safe, and boots in a second with `pnpm dev`. See [`examples/README.md`](./examples/README.md).
+
 ## Configuration
 
 Defaults are tuned for development. The full option matrix is in [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md). The minimum you usually need:

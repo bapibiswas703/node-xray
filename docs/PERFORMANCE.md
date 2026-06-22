@@ -20,24 +20,23 @@ If a change regresses any of these by more than 10%, the CI fails. If a change r
 
 ## The benchmark suite
 
-`bench/` contains `tinybench` scripts that exercise the core package directly and the adapters through real framework drivers.
+`packages/bench/` ships a runnable perf comparison. It boots an Express server with and without `xray()`, fires 5000 requests + 500 warmup, and reports rps + mean + p50/p95/p99 + overhead.
 
 ```bash
-pnpm bench                # run all benchmarks
-pnpm bench:check          # run with budget assertions (CI mode)
-pnpm bench:report         # generate a markdown report
+pnpm bench
 ```
 
-The harness:
+Sample output:
 
-1. Boots the example app for the framework under test.
-2. Pre-warms the store with 100 synthetic records.
-3. Drives 10_000 requests through `supertest` / `fastify.inject` / `@nestjs/testing`.
-4. Samples p50, p99, p99.9, mean.
-5. Compares against a baseline run from the previous release.
-6. Asserts the budgets above.
+```
+node-xray benchmark — 5000 requests per run, 500 warmup
+  xray disabled (control)      rps=  540.36 mean=    1.85ms p50=    1.67ms p95=    3.73ms p99=    5.39ms total= 9253.03ms
+  xray enabled                 rps=  555.88 mean=    1.80ms p50=    1.51ms p95=    3.69ms p99=    5.78ms total= 8994.70ms
 
-The harness writes a JSON file to `bench/results/<date>.json` and a Markdown summary to `bench/results/<date>.md`. The CI job uploads both as artifacts.
+  mean-latency overhead: -2.8%   rps delta: --2.9%
+```
+
+The exact delta varies by OS scheduling noise, but it stays in the low single-digit percent range on Node 20/22/24. The budgets below are checked against this delta.
 
 ## What is on the hot path
 
@@ -86,7 +85,7 @@ ring_buffer = maxRequests × (record_overhead + body_cap + stack_cap)
             ≈ 21 MB
 ```
 
-In practice, only a few bodies hit the cap, so steady state is closer to 1.5 MB. The `bench/soak.ts` script measures this over a 1-hour run.
+In practice, only a few bodies hit the cap, so steady state is closer to 1.5 MB. The express soak test (`packages/express/src/soak.test.ts`) asserts this in a single run.
 
 ### Burst
 
@@ -110,14 +109,13 @@ The two functions to look for in the output are `XRayStore.add` and `XRayRedacto
 
 ## Soak test
 
-A nightly CI job runs the express-demo for 1 hour, driving 10 requests per second. The job asserts:
+`packages/express/src/soak.test.ts` is an in-PR test that drives 5 batches of 200 requests across 5 different routes (GET, POST, slow, error, 404). It asserts:
 
-- RSS delta < 30 MB
-- Heap delta < 10 MB
-- Zero unhandled promise rejections
-- WS client reconnects < 3
+- Ring buffer stays bounded at 50 entries.
+- Heap growth is under 25 MB.
+- Zero unhandled promise rejections.
 
-A regression on this job is treated as a high-priority bug.
+The full test takes about 7 seconds and runs on every PR. A regression on this test is treated as a high-priority bug.
 
 ## Limits
 

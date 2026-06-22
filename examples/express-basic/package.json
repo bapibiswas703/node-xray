@@ -1,0 +1,28 @@
+{
+  "name": "@node-xray/example-express-basic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Express + node-xray example",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "scripts": {
+    "start": "tsx ./src/server.ts",
+    "dev": "tsx watch ./src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@node-xray/core": "workspace:*",
+    "@node-xray/dashboard": "workspace:*",
+    "@node-xray/express": "workspace:*",
+    "@node-xray/types": "workspace:*",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

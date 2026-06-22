@@ -228,3 +228,4 @@ npx tsx src/main.ts
 - Read [`CONFIGURATION.md`](./CONFIGURATION.md) to tune options.
 - Read [`SECURITY.md`](./SECURITY.md) before running this anywhere that is not your laptop.
 - Read [`FRAMEWORKS.md`](./FRAMEWORKS.md) for framework-specific gotchas.
+- Try one of the runnable examples under [`examples/`](../examples) — each is ~50 lines, type-safe, and boots with `pnpm dev`.

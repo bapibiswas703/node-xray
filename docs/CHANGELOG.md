@@ -15,7 +15,13 @@ Each package has its own changelog. This file is the index. The per-package chan
 - `@node-xray/fastify` adapter exposing `xrayPlugin`.
 - `@node-xray/nestjs` adapter exposing `NodeXrayModule.register()`, `XRayService`, and `@XrayTrace()`.
 - `@node-xray/dashboard` with the v4.1 visual design (Runtime and Request/Response tabs) ported to modular assets, exponential-backoff reconnect, and snapshot replay.
-- Three runnable examples (`examples/express-demo`, `examples/fastify-demo`, `examples/nestjs-demo`) in both JavaScript and TypeScript.
+- **Three runnable examples** under `examples/`, one per framework:
+  - `examples/express-basic` — `xray()` middleware + error handler
+  - `examples/fastify-basic` — `xrayPlugin` with `fastify-plugin`
+  - `examples/nestjs-basic` — `NodeXrayModule.register()` + global interceptor
+    Each is ~50 lines, type-safe, and boots in a second with `pnpm dev`.
+- **Performance bench** under `packages/bench/` (`pnpm bench`): 5000 requests + 500 warmup, reports rps + p50/p95/p99 + overhead against an Express server.
+- **Soak test** in `packages/express/src/soak.test.ts`: 5 batches × 200 requests across 5 routes, asserts ring buffer stays bounded at 50 + heap growth < 25 MB.
 - Benchmark suite under `bench/` with `tinybench` and budget assertions.
 - Full documentation set under `docs/`.
 - CI on Node 20.18, 22.11, 24.x (Ubuntu + Windows) covering typecheck, lint, test, build, and `bench:check`.
@@ -24,11 +30,14 @@ Each package has its own changelog. This file is the index. The per-package chan
 ### Security
 
 - Default-deny header redaction (`authorization`, `cookie`, `set-cookie`, `x-api-key`, `proxy-authorization`).
+- **Expanded redaction deny list** in P6: 24 sensitive headers (was 14), 22 body paths (was 10), plus `redactHeaders: false` / `redactBodyPaths: false` opt-out for trusted environments.
+- **Dashboard HTTP endpoint auth-gated** in P6 (was WebSocket-only): HTML, JS, and CSS now go through the same `authorize()` check; unauthenticated → 401 + `WWW-Authenticate: Basic`.
+- **CSP tightened** in P6: `form-action 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`. `script-src 'self'` (no `'unsafe-inline'`).
+- **Auth errors funnel through `onError`**: a new `MountOptions.onError` hook receives custom-verify exceptions so they surface in observability rather than becoming unhandled rejections.
 - JSON-path body redaction with depth limit and cycle detection.
 - Body size cap with explicit `__truncated` marker.
 - Refuse-to-mount in `NODE_ENV=production` without an `auth` block.
 - WebSocket `Origin` allowlist and `1008` close on policy violation.
-- CSP, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer` on the dashboard route.
 - Startup warning when the dashboard is bound to a non-loopback interface.
 
 ## Release history

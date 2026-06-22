@@ -194,3 +194,15 @@ location /node-xray/ {
 ### Container images
 
 The dashboard is served from inside the Node process. There is no extra port. If you run multiple replicas, each replica has its own dashboard — you will only see the requests handled by that replica. This is by design. See [`ROADMAP.md`](./ROADMAP.md) for the multi-replica story.
+
+## Runnable examples
+
+Every framework has a minimal runnable example under [`examples/`](../examples):
+
+- [`examples/express-basic`](../examples/express-basic) — `xray()` + error handler
+- [`examples/fastify-basic`](../examples/fastify-basic) — `xrayPlugin` with `fastify-plugin`
+- [`examples/nestjs-basic`](../examples/nestjs-basic) — `NodeXrayModule.register` + global interceptor
+
+Each is ~50 lines of TypeScript, runs with `pnpm dev`, and demonstrates the
+full path from `app.use(...)` to a working dashboard. See
+[`examples/README.md`](../examples/README.md) for the full tour.

@@ -1,0 +1,27 @@
+{
+  "name": "@node-xray/example-fastify-basic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Fastify + node-xray example",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "scripts": {
+    "start": "tsx ./src/server.ts",
+    "dev": "tsx watch ./src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@node-xray/core": "workspace:*",
+    "@node-xray/dashboard": "workspace:*",
+    "@node-xray/fastify": "workspace:*",
+    "@node-xray/types": "workspace:*",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
