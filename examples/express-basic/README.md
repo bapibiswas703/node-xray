@@ -7,10 +7,16 @@ explore the inspector in 60 seconds.
 
 ```bash
 pnpm install
-pnpm dev          # tsx watch (auto-reload)
+cp .env.example .env   # then edit .env if you want a different port/pass
+pnpm dev               # auto-reload on save
 # or
-pnpm start        # plain tsx
+pnpm start             # plain start
 ```
+
+The `dev` and `start` scripts use Node's built-in `--env-file=.env` to
+load `PORT`, `NODE_ENV`, and `XRAY_DASHBOARD_PASS` from the project
+root. Edit `.env` (or export the variables in your shell) to change
+them.
 
 Then open:
 
@@ -37,13 +43,16 @@ sensitive fields redacted by default).
 
 ## Production mode
 
-```bash
-NODE_ENV=production XRAY_DASHBOARD_PASS=s3cret pnpm start
+Edit `.env` and set:
+
+```dotenv
+NODE_ENV=production
+XRAY_DASHBOARD_PASS=s3cret
 ```
 
-In production the dashboard requires HTTP Basic auth (`admin` /
-`XRAY_DASHBOARD_PASS`), body capture is disabled by default, and the CSP
-is tightened to `script-src 'self'`.
+Then `pnpm start`. The dashboard now requires HTTP Basic auth
+(`admin` / `XRAY_DASHBOARD_PASS`), body capture is disabled by default,
+and the CSP is tightened to `script-src 'self'`.
 
 ## Files
 
