@@ -31,7 +31,8 @@
   },
   "dependencies": {
     "@node-xray/core": "workspace:*",
-    "@node-xray/types": "workspace:*"
+    "@node-xray/types": "workspace:*",
+    "fastify-plugin": "^5.0.0"
   },
   "devDependencies": {
     "fastify": "^5.2.0",
