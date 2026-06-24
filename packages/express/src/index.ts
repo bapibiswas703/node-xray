@@ -146,6 +146,11 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
       res.setHeader('cache-control', 'no-cache');
       res.statusCode = 200;
       res.end(html);
+      // The http.Server's 'request' listener (added later by
+      // `core.mount()`) also tries to handle this path. Neutralize
+      // its ability to write so it doesn't throw ERR_HTTP_HEADERS_SENT.
+      res.setHeader = (): Response => res;
+      res.end = (): Response => res;
       return;
     }
     if (req.path === `${dashboardPath}/ws`) {

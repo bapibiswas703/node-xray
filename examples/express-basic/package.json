@@ -9,8 +9,8 @@
     "node": ">=20.18.0"
   },
   "scripts": {
-    "start": "tsx ./src/server.ts",
-    "dev": "tsx watch ./src/server.ts",
+    "start": "node --env-file=.env --import tsx ./src/server.ts",
+    "dev": "node --env-file=.env --import tsx --watch ./src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
