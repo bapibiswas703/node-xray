@@ -14,7 +14,14 @@
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@node-xray/core": ["../../packages/core/src/index.ts"],
+      "@node-xray/dashboard": ["../../packages/dashboard/src/index.ts"],
+      "@node-xray/express": ["../../packages/express/src/index.ts"],
+      "@node-xray/types": ["../../packages/types/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }
