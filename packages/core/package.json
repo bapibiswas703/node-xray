@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Core runtime engine for node-xray: async context, event store, loop monitor, WebSocket hub, redactor",
   "license": "MIT",
   "type": "module",
