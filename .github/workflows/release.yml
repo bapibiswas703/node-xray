@@ -17,6 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
 
+    # `id-token: write` is REQUIRED for npm provenance. The OIDC token
+    # is exchanged with sigstore to produce the SLSA provenance
+    # attestation that npm attaches to each published package.
+    permissions:
+      contents: write
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
         with:
