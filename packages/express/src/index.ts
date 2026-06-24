@@ -69,6 +69,38 @@ function loadIndexHtml(dashboardPath: string, assetsDir: string | null): string 
   }
 }
 
+const ASSET_MIME: Record<string, string> = {
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.map': 'application/json',
+};
+
+function getAssetMime(filename: string): string {
+  const i = filename.lastIndexOf('.');
+  if (i === -1) return 'application/octet-stream';
+  return ASSET_MIME[filename.slice(i).toLowerCase()] ?? 'application/octet-stream';
+}
+
+let cachedAsset: { name: string; mime: string; body: Buffer } | null = null;
+function loadAsset(name: string, assetsDir: string | null): { mime: string; body: Buffer } | null {
+  if (cachedAsset && cachedAsset.name === name)
+    return { mime: cachedAsset.mime, body: cachedAsset.body };
+  if (assetsDir === null) return null;
+  try {
+    const body = readFileSync(join(assetsDir, name));
+    const mime = getAssetMime(name);
+    cachedAsset = { name, mime, body };
+    return { mime, body };
+  } catch {
+    return null;
+  }
+}
+
 const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
 
 /**
@@ -212,6 +244,45 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
       res.statusCode = 426;
       res.setHeader('Connection', 'close');
       res.end('Upgrade Required');
+      return;
+    }
+
+    // 1b. Serve the dashboard's static assets (app.js, styles.css,
+    //     anything under /assets/*) here, before Express's 404
+    //     handler. The core's 'request' listener would also try to
+    //     handle these, but it does so via an async `authorize().then()`
+    //     callback, which fires AFTER Express's synchronous 404
+    //     handler and crashes with ERR_HTTP_HEADERS_SENT. Serving
+    //     the assets here and neutralizing `res` is the fix.
+    if (
+      req.path === `${dashboardPath}/app.js` ||
+      req.path === `${dashboardPath}/styles.css` ||
+      req.path.startsWith(`${dashboardPath}/assets/`)
+    ) {
+      const rel =
+        req.path === `${dashboardPath}/app.js`
+          ? 'app.js'
+          : req.path === `${dashboardPath}/styles.css`
+            ? 'styles.css'
+            : req.path.slice(`${dashboardPath}/assets/`.length);
+      const asset = loadAsset(rel, assetsDir);
+      if (asset !== null) {
+        res.statusCode = 200;
+        res.setHeader('content-type', asset.mime);
+        res.setHeader('cache-control', 'public, max-age=3600');
+        res.end(asset.body);
+        // Neutralize so the core's later 'request' listener does not
+        // crash with ERR_HTTP_HEADERS_SENT.
+        res.setHeader = (): Response => res;
+        res.end = (): Response => res;
+        const server = (req.socket as unknown as { server?: HttpServer })?.server;
+        if (!dashboardMounted) {
+          tryMountDashboard(server);
+        }
+      } else {
+        res.statusCode = 404;
+        res.end('not found');
+      }
       return;
     }
 
