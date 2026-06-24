@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import type { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
 import type { XRayOptions, SnapshotSide } from '@node-xray/types';
 import {
@@ -10,31 +11,65 @@ import {
   type Core,
   type SerializedError,
 } from '@node-xray/core';
-import { getAssetsDir } from '@node-xray/dashboard';
 
 const RECORD_ON_REQ = Symbol.for('@node-xray/express.record');
 const RESPONSE_BODY_FLAG = Symbol.for('@node-xray/express.response-body');
 
 /**
+ * Resolve the absolute path to the `@node-xray/dashboard` assets
+ * directory at runtime. We do NOT call `getAssetsDir()` from
+ * `@node-xray/dashboard` because tsup inlines that function into
+ * the consumer's dist, which breaks its `__filename` / `import.meta.url`
+ * resolution. Instead, we use `require.resolve` (via `createRequire`
+ * for ESM compatibility) to find the dashboard's `package.json`,
+ * then navigate to the `assets/` sibling directory. This works in
+ * both monorepo and `node_modules` layouts because `require.resolve`
+ * uses Node's standard module resolution at runtime in THIS file's
+ * context, not the dashboard's.
+ */
+function resolveDashboardAssetsDir(): string | null {
+  const req = createRequire(import.meta.url);
+  let mainEntry: string;
+  try {
+    mainEntry = req.resolve('@node-xray/dashboard');
+  } catch {
+    return null;
+  }
+  // The main entry resolves to one of:
+  //   - `<pkg>/dist/index.cjs` (published CJS)
+  //   - `<pkg>/dist/index.js`  (published ESM)
+  //   - `<pkg>/src/index.ts`   (workspace source, via tsx)
+  // In every case the assets directory is a sibling of the
+  // immediate parent (i.e. `<pkg>/assets/`). We cannot use
+  // `<pkg>/package.json` because the dashboard's `exports` field
+  // does not allow it; the main entry is always reachable.
+  return resolve(dirname(mainEntry), '..', 'assets');
+}
+
+/**
  * Cached dashboard assets. Loaded once on first request, then served
- * from memory. The assets are shipped by `@node-xray/dashboard`; we
- * resolve the directory through the public `getAssetsDir()` helper.
+ * from memory. The assets are shipped by `@node-xray/dashboard`.
  */
 let cachedIndexHtml: string | null = null;
-function loadIndexHtml(path: string): string {
+function loadIndexHtml(dashboardPath: string, assetsDir: string | null): string {
   if (cachedIndexHtml !== null) return cachedIndexHtml;
+  if (assetsDir === null) {
+    cachedIndexHtml = PLACEHOLDER_HTML;
+    return cachedIndexHtml;
+  }
   try {
-    const html = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    const html = readFileSync(join(assetsDir, 'index.html'), 'utf-8');
     cachedIndexHtml = html
-      .replace(/__STYLES__/g, encodeURI(`${path}/styles.css`))
-      .replace(/__APP__/g, encodeURI(`${path}/app.js`));
+      .replace(/__STYLES__/g, encodeURI(`${dashboardPath}/styles.css`))
+      .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
     return cachedIndexHtml;
   } catch {
-    // Dashboard package not installed; fall back to a minimal page.
-    cachedIndexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+    cachedIndexHtml = PLACEHOLDER_HTML;
     return cachedIndexHtml;
   }
 }
+
+const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
 
 /**
  * Public return value of `xray()`. The `RequestHandler` is what
@@ -108,6 +143,11 @@ export interface XRayExpressHandle extends RequestHandler {
 export function xray(options: XRayOptions = {}): XRayExpressHandle {
   const core = createCore(options);
 
+  // Resolve the dashboard assets directory ONCE at registration time.
+  // See `resolveDashboardAssetsDir` for why we do this here instead
+  // of calling `getAssetsDir()` from `@node-xray/dashboard`.
+  const assetsDir = resolveDashboardAssetsDir();
+
   let dashboardMounted = false;
   let mountTarget: HttpServer | null = null;
 
@@ -122,7 +162,11 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     }
     mountTarget = server;
     try {
-      core.mount(server, { assetsDir: getAssetsDir() });
+      if (assetsDir !== null) {
+        core.mount(server, { assetsDir });
+      } else {
+        core.mount(server);
+      }
       dashboardMounted = true;
     } catch (err) {
       core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -140,7 +184,7 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     //    `@node-xray/dashboard`'s `assets/` directory on first hit.
     const dashboardPath = core.options.path;
     if (req.path === dashboardPath || req.path === `${dashboardPath}/`) {
-      const html = loadIndexHtml(dashboardPath);
+      const html = loadIndexHtml(dashboardPath, assetsDir);
       applyDashboardSecurityHeaders(res);
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.setHeader('cache-control', 'no-cache');
@@ -151,6 +195,15 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
       // its ability to write so it doesn't throw ERR_HTTP_HEADERS_SENT.
       res.setHeader = (): Response => res;
       res.end = (): Response => res;
+      // Make sure the core's listener is registered so the static
+      // assets (app.js, styles.css) are served for subsequent
+      // requests. Without this, the first request to the dashboard
+      // would short-circuit here and the listener would never be
+      // added.
+      const server = (req.socket as unknown as { server?: HttpServer })?.server;
+      if (!dashboardMounted) {
+        tryMountDashboard(server);
+      }
       return;
     }
     if (req.path === `${dashboardPath}/ws`) {
