@@ -302,7 +302,31 @@ describe('@node-xray/express', () => {
 
       const res = await request(server).get('/node-xray');
       expect(res.status).toBe(200);
+
       // The unhandled-error counter on the server must be 0.
+      expect(errors).toHaveLength(0);
+    });
+
+    it('serves the dashboard static assets (app.js, styles.css) without ERR_HTTP_HEADERS_SENT', async () => {
+      // Regression test: the express middleware must serve the
+      // dashboard's static assets synchronously, before Express's
+      // 404 handler. Otherwise the core's async `authorize().then()`
+      // listener fires after Express has already sent the 404 and
+      // crashes with ERR_HTTP_HEADERS_SENT.
+      app.get('/api/users', (_req, res) => res.json({ ok: true }));
+      server = app.listen(0);
+      const errors: unknown[] = [];
+      server.on('clientError', (err) => errors.push(err));
+
+      const js = await request(server).get('/node-xray/app.js');
+      expect(js.status).toBe(200);
+      expect(js.headers['content-type']).toMatch(/javascript/);
+      expect(js.text).toContain('node-xray');
+
+      const css = await request(server).get('/node-xray/styles.css');
+      expect(css.status).toBe(200);
+      expect(css.headers['content-type']).toMatch(/text\/css/);
+
       expect(errors).toHaveLength(0);
     });
   });
