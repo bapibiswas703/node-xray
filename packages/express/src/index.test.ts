@@ -288,6 +288,23 @@ describe('@node-xray/express', () => {
       expect(() => xrayInstance.mountDashboard(server)).not.toThrow();
       expect(() => xrayInstance.mountDashboard(server)).not.toThrow();
     });
+
+    it('does not throw ERR_HTTP_HEADERS_SENT when the dashboard is requested via a real http.Server', async () => {
+      // Regression test for the race between the express middleware
+      // (which serves the dashboard HTML) and the http.Server's
+      // 'request' listener (added by `core.mount()`). The middleware
+      // neutralizes `res.setHeader` / `res.end` after writing, so
+      // the core's listener is a no-op when it runs after.
+      app.get('/api/users', (_req, res) => res.json({ ok: true }));
+      server = app.listen(0);
+      const errors: unknown[] = [];
+      server.on('clientError', (err) => errors.push(err));
+
+      const res = await request(server).get('/node-xray');
+      expect(res.status).toBe(200);
+      // The unhandled-error counter on the server must be 0.
+      expect(errors).toHaveLength(0);
+    });
   });
 
   describe('concurrency', () => {
