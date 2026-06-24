@@ -178,7 +178,7 @@ importers:
   packages/core:
     dependencies:
       '@node-xray/types':
-        specifier: workspace:*
+        specifier: ^0.2.1
         version: link:../types
       ws:
         specifier: ^8.18.0
@@ -206,10 +206,10 @@ importers:
   packages/dashboard:
     dependencies:
       '@node-xray/core':
-        specifier: workspace:*
+        specifier: ^0.3.1
         version: link:../core
       '@node-xray/types':
-        specifier: workspace:*
+        specifier: ^0.2.0
         version: link:../types
     devDependencies:
       '@vitest/coverage-v8':
@@ -231,13 +231,13 @@ importers:
   packages/express:
     dependencies:
       '@node-xray/core':
-        specifier: workspace:*
+        specifier: ^0.3.1
         version: link:../core
       '@node-xray/dashboard':
-        specifier: workspace:*
+        specifier: ^0.2.0
         version: link:../dashboard
       '@node-xray/types':
-        specifier: workspace:*
+        specifier: ^0.2.1
         version: link:../types
     devDependencies:
       '@types/express':
@@ -274,13 +274,13 @@ importers:
   packages/fastify:
     dependencies:
       '@node-xray/core':
-        specifier: workspace:*
+        specifier: ^0.3.1
         version: link:../core
       '@node-xray/dashboard':
-        specifier: workspace:*
+        specifier: ^0.2.0
         version: link:../dashboard
       '@node-xray/types':
-        specifier: workspace:*
+        specifier: ^0.2.1
         version: link:../types
       fastify-plugin:
         specifier: ^5.0.1
@@ -308,13 +308,13 @@ importers:
   packages/nestjs:
     dependencies:
       '@node-xray/core':
-        specifier: workspace:*
+        specifier: ^0.3.1
         version: link:../core
       '@node-xray/dashboard':
-        specifier: workspace:*
+        specifier: ^0.2.0
         version: link:../dashboard
       '@node-xray/types':
-        specifier: workspace:*
+        specifier: ^0.2.1
         version: link:../types
     devDependencies:
       '@nestjs/common':
