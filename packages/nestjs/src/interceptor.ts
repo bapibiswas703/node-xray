@@ -5,14 +5,44 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import { tap, catchError, throwError, EMPTY, type Observable } from 'rxjs';
 import type { Core, SerializedError } from '@node-xray/core';
 import { redactHeaders, redactSnapshot, applyDashboardSecurityHeaders } from '@node-xray/core';
-import { getAssetsDir } from '@node-xray/dashboard';
 import type { XRayRequest, XRayResponse } from './types.js';
 import { XRAY_REQUEST_KEY, XRAY_RESPONSE_KEY } from './symbols.js';
 import { XRAY_CORE } from './service.js';
+
+/**
+ * Resolve the absolute path to the `@node-xray/dashboard` assets
+ * directory at runtime. We do NOT call `getAssetsDir()` from
+ * `@node-xray/dashboard` because tsup inlines that function into
+ * the consumer's dist, which breaks its `__filename` / `import.meta.url`
+ * resolution. Instead, we use `require.resolve` (via `createRequire`
+ * for ESM compatibility) to find the dashboard's `package.json`,
+ * then navigate to the `assets/` sibling directory.
+ */
+function resolveDashboardAssetsDir(): string | null {
+  const req = createRequire(import.meta.url);
+  let mainEntry: string;
+  try {
+    mainEntry = req.resolve('@node-xray/dashboard');
+  } catch {
+    return null;
+  }
+  // The main entry resolves to one of:
+  //   - `<pkg>/dist/index.cjs` (published CJS)
+  //   - `<pkg>/dist/index.js`  (published ESM)
+  //   - `<pkg>/src/index.ts`   (workspace source, via tsx)
+  // In every case the assets directory is a sibling of the
+  // immediate parent (i.e. `<pkg>/assets/`). We cannot use
+  // `<pkg>/package.json` because the dashboard's `exports` field
+  // does not allow it; the main entry is always reachable.
+  return resolve(dirname(mainEntry), '..', 'assets');
+}
+
+const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
 
 const DASHBOARD_MOUNTED = Symbol.for('@node-xray/nestjs.dashboard-mounted');
 const SERVER_LOCK = Symbol.for('@node-xray/nestjs.server-lock');
@@ -36,6 +66,8 @@ interface RequestRecordWithError {
  *     error on the in-flight record.
  */
 export class XrayInterceptor implements NestInterceptor {
+  private readonly assetsDir: string | null = resolveDashboardAssetsDir();
+
   constructor(@Inject(XRAY_CORE) private readonly core: Core) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -67,7 +99,7 @@ export class XrayInterceptor implements NestInterceptor {
       // If the prepend listener didn't respond (e.g. fastify raw
       // server), fall back to responding inline.
       if (response.statusCode !== 200) {
-        respondDashboard(response as unknown as DashboardResponse, dashboardPath);
+        respondDashboard(response as unknown as DashboardResponse, dashboardPath, this.assetsDir);
       }
       return EMPTY;
     }
@@ -206,7 +238,7 @@ export class XrayInterceptor implements NestInterceptor {
             );
             setHeader('content-type', 'text/html; charset=utf-8');
             setHeader('cache-control', 'no-cache');
-            const html = loadDashboardHtml(dashboardPath);
+            const html = loadDashboardHtml(dashboardPath, this.assetsDir);
             if (res.send) {
               res.send(html);
             } else {
@@ -222,7 +254,11 @@ export class XrayInterceptor implements NestInterceptor {
         }
 
         try {
-          this.core.mount(server, { assetsDir: getAssetsDir() });
+          if (this.assetsDir !== null) {
+            this.core.mount(server, { assetsDir: this.assetsDir });
+          } else {
+            this.core.mount(server);
+          }
           coreRef[SERVER_LOCK] = true;
         } catch (err) {
           this.core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -334,22 +370,30 @@ type DashboardResponse = XRayResponse & {
 };
 
 let cachedIndexHtml: string | null = null;
-function loadDashboardHtml(dashboardPath: string): string {
+function loadDashboardHtml(dashboardPath: string, assetsDir: string | null): string {
   if (cachedIndexHtml !== null) return cachedIndexHtml;
+  if (assetsDir === null) {
+    cachedIndexHtml = PLACEHOLDER_HTML;
+    return cachedIndexHtml;
+  }
   try {
-    const raw = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    const raw = readFileSync(join(assetsDir, 'index.html'), 'utf-8');
     cachedIndexHtml = raw
       .replace(/__STYLES__/g, encodeURI(`${dashboardPath}/styles.css`))
       .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
     return cachedIndexHtml;
   } catch {
-    cachedIndexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+    cachedIndexHtml = PLACEHOLDER_HTML;
     return cachedIndexHtml;
   }
 }
 
-function respondDashboard(response: DashboardResponse, path: string): void {
-  const html = loadDashboardHtml(path);
+function respondDashboard(
+  response: DashboardResponse,
+  path: string,
+  assetsDir: string | null,
+): void {
+  const html = loadDashboardHtml(path, assetsDir);
   const setHeader = (name: string, value: string): void => {
     if (response.setHeader) {
       response.setHeader(name, value);

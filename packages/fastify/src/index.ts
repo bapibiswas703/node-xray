@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import type { XRayOptions, SnapshotSide } from '@node-xray/types';
 import {
   createCore,
@@ -11,20 +12,50 @@ import {
   type Core,
   type SerializedError,
 } from '@node-xray/core';
-import { getAssetsDir } from '@node-xray/dashboard';
 
 const RECORD_ON_REQ = Symbol.for('@node-xray/fastify.record');
 const RESPONSE_BODY_FLAG = Symbol.for('@node-xray/fastify.response-body');
 
-/** Read the dashboard HTML from the `@node-xray/dashboard` package. */
-function loadDashboardHtml(dashboardPath: string): string {
+/**
+ * Resolve the absolute path to the `@node-xray/dashboard` assets
+ * directory at runtime. We do NOT call `getAssetsDir()` from
+ * `@node-xray/dashboard` because tsup inlines that function into
+ * the consumer's dist, which breaks its `__filename` / `import.meta.url`
+ * resolution. Instead, we use `require.resolve` (via `createRequire`
+ * for ESM compatibility) to find the dashboard's `package.json`,
+ * then navigate to the `assets/` sibling directory.
+ */
+function resolveDashboardAssetsDir(): string | null {
+  const req = createRequire(import.meta.url);
+  let mainEntry: string;
   try {
-    const raw = readFileSync(join(getAssetsDir(), 'index.html'), 'utf-8');
+    mainEntry = req.resolve('@node-xray/dashboard');
+  } catch {
+    return null;
+  }
+  // The main entry resolves to one of:
+  //   - `<pkg>/dist/index.cjs` (published CJS)
+  //   - `<pkg>/dist/index.js`  (published ESM)
+  //   - `<pkg>/src/index.ts`   (workspace source, via tsx)
+  // In every case the assets directory is a sibling of the
+  // immediate parent (i.e. `<pkg>/assets/`). We cannot use
+  // `<pkg>/package.json` because the dashboard's `exports` field
+  // does not allow it; the main entry is always reachable.
+  return resolve(dirname(mainEntry), '..', 'assets');
+}
+
+const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+
+/** Read the dashboard HTML from the `@node-xray/dashboard` package. */
+function loadDashboardHtml(dashboardPath: string, assetsDir: string | null): string {
+  if (assetsDir === null) return PLACEHOLDER_HTML;
+  try {
+    const raw = readFileSync(join(assetsDir, 'index.html'), 'utf-8');
     return raw
       .replace(/__STYLES__/g, encodeURI(`${dashboardPath}/styles.css`))
       .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
   } catch {
-    return `<!doctype html><html><head><meta charset="utf-8"><title>node-xray</title></head><body style="font-family:ui-monospace,monospace;background:#0d0f1a;color:#e2e8f0;padding:40px"><h1>node-xray dashboard not installed</h1><p>Install <code>@node-xray/dashboard</code> to enable the UI.</p></body></html>`;
+    return PLACEHOLDER_HTML;
   }
 }
 
@@ -91,6 +122,7 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
   const core = createCore(options);
   const path = core.options.path;
   const skipDashboard = options.skipDashboard === true;
+  const assetsDir = resolveDashboardAssetsDir();
 
   const pluginFn: FastifyPluginAsync<XRayFastifyOptions> = fp(
     async function xrayPluginFn(instance) {
@@ -108,7 +140,11 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
         }
         mountTarget = server;
         try {
-          core.mount(server, { assetsDir: getAssetsDir() });
+          if (assetsDir !== null) {
+            core.mount(server, { assetsDir });
+          } else {
+            core.mount(server);
+          }
           dashboardMounted = true;
         } catch (err) {
           core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
@@ -120,7 +156,7 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
       // read from `@node-xray/dashboard`'s `assets/` directory on
       // first hit and cached in memory.
       if (!skipDashboard) {
-        const cachedHtml = loadDashboardHtml(path);
+        const cachedHtml = loadDashboardHtml(path, assetsDir);
         instance.get(path, (_req, reply) => {
           applyDashboardSecurityHeaders(reply.raw);
           reply
