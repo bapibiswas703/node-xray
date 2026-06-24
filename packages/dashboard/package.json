@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Dashboard assets and WebSocket server for node-xray",
   "license": "MIT",
   "type": "module",
