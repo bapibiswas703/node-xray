@@ -41,4 +41,4 @@ If you are contributing:
 
 ## Other files in this directory
 
-- `node_xray_dashboard_v4_1 - Copy.html` — the frozen UI mockup that the v1 dashboard is built from.
+- `node_xray_dashboard_v4_1.html` — the frozen UI mockup that the v1 dashboard is built from.
