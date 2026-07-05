@@ -15,7 +15,7 @@ import {
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { NodeXrayModule, XRayService, XRayTrace as XrayTrace } from './index.js';
-import { _clearAllForTest } from '@node-xray/core';
+import { _clearAllForTest, getContext, withTags } from '@node-xray/core';
 import type { Core, RequestRecord } from '@node-xray/core';
 
 export const USERS_SERVICE = Symbol.for('@test.users-service');
@@ -55,8 +55,29 @@ class UsersController {
   }
 }
 
+@Controller('api/ctx')
+class CtxController {
+  @Get()
+  async get(): Promise<{ atStart?: string; afterAwait?: string; inTimer?: string }> {
+    const atStart = getContext()?.requestId;
+    await Promise.resolve();
+    const afterAwait = getContext()?.requestId;
+    const inTimer = await new Promise<string | undefined>((r) =>
+      setTimeout(() => r(getContext()?.requestId), 5),
+    );
+    await withTags({ userId: 'u42' }, async () => {
+      await Promise.resolve();
+    });
+    return {
+      ...(atStart ? { atStart } : {}),
+      ...(afterAwait ? { afterAwait } : {}),
+      ...(inTimer ? { inTimer } : {}),
+    };
+  }
+}
+
 @Module({
-  controllers: [UsersController],
+  controllers: [UsersController, CtxController],
   providers: [{ provide: USERS_SERVICE, useClass: UsersService }],
 })
 class UsersModule {}
@@ -232,6 +253,37 @@ describe('@node-xray/nestjs', () => {
       await new Promise((r) => setTimeout(r, 20));
       const recorded = records().filter((r) => r.path === '/node-xray');
       expect(recorded).toHaveLength(0);
+
+      await app.close();
+    });
+  });
+
+  describe('async context propagation (ALS)', () => {
+    it('exposes getContext() inside a handler, across await and setTimeout', async () => {
+      const { app, records } = await buildApp(() => NodeXrayModule.register({ maxRequests: 50 }));
+
+      const res = await request(app.getHttpServer()).get('/api/ctx');
+      expect(res.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 30));
+
+      const rec = records().find((r) => r.path === '/api/ctx');
+      expect(rec).toBeDefined();
+      const body = res.body as { atStart?: string; afterAwait?: string; inTimer?: string };
+      expect(body.atStart).toBe(rec?.id);
+      expect(body.afterAwait).toBe(rec?.id);
+      expect(body.inTimer).toBe(rec?.id);
+
+      await app.close();
+    });
+
+    it('persists withTags tags to the finished record', async () => {
+      const { app, records } = await buildApp(() => NodeXrayModule.register({ maxRequests: 50 }));
+
+      await request(app.getHttpServer()).get('/api/ctx');
+      await new Promise((r) => setTimeout(r, 30));
+
+      const rec = records().find((r) => r.path === '/api/ctx');
+      expect(rec?.tags).toMatchObject({ userId: 'u42' });
 
       await app.close();
     });

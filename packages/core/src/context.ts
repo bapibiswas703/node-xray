@@ -14,6 +14,17 @@ import { XRayNoContextError } from './errors.js';
 const als = new AsyncLocalStorage<XRayContext>();
 
 /**
+ * Well-known key in `XRayContext.refs` under which adapters store the
+ * live record's tag bag. `withTags` is lexically scoped (the parent
+ * context is restored when `fn` returns), but tags must still reach
+ * the final `RequestRecord` — so in addition to the scoped merge,
+ * `withTags` writes into this accumulator when the adapter provided
+ * one. Adapters point it at `record.tags`, which makes every tag
+ * stick to the record automatically.
+ */
+export const RECORD_TAGS_REF = 'node-xray:record-tags';
+
+/**
  * Returns the current async-local context, or `undefined` if called
  * outside a tracked request.
  */
@@ -43,6 +54,12 @@ export async function withTags(
 ): Promise<unknown> {
   const parent = als.getStore();
   if (!parent) return fn();
+  // Persist the tags on the record's accumulator (if the adapter
+  // registered one) so they survive this lexical scope.
+  const acc = parent.refs.get(RECORD_TAGS_REF);
+  if (acc && typeof acc === 'object') {
+    Object.assign(acc as Record<string, string | number | boolean>, tags);
+  }
   const child: XRayContext = {
     ...parent,
     tags: { ...parent.tags, ...tags },

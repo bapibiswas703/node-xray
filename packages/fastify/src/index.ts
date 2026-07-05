@@ -3,12 +3,15 @@ import fp from 'fastify-plugin';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
-import type { XRayOptions, SnapshotSide } from '@node-xray/types';
+import type { XRayOptions, SnapshotSide, XRayContext } from '@node-xray/types';
 import {
   createCore,
   redactHeaders,
   redactSnapshot,
   applyDashboardSecurityHeaders,
+  verifyDashboardAuth,
+  runWithContext,
+  RECORD_TAGS_REF,
   type Core,
   type SerializedError,
 } from '@node-xray/core';
@@ -56,6 +59,39 @@ function loadDashboardHtml(dashboardPath: string, assetsDir: string | null): str
       .replace(/__APP__/g, encodeURI(`${dashboardPath}/app.js`));
   } catch {
     return PLACEHOLDER_HTML;
+  }
+}
+
+const ASSET_MIME: Record<string, string> = {
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.map': 'application/json',
+};
+
+const assetCache = new Map<string, { mime: string; body: Buffer }>();
+
+/** Read a dashboard asset from disk once and serve it from memory. */
+function loadAsset(name: string, assetsDir: string | null): { mime: string; body: Buffer } | null {
+  const hit = assetCache.get(name);
+  if (hit) return hit;
+  if (assetsDir === null) return null;
+  try {
+    const body = readFileSync(join(assetsDir, name));
+    const i = name.lastIndexOf('.');
+    const mime =
+      i === -1
+        ? 'application/octet-stream'
+        : (ASSET_MIME[name.slice(i).toLowerCase()] ?? 'application/octet-stream');
+    const entry = { mime, body };
+    assetCache.set(name, entry);
+    return entry;
+  } catch {
+    return null;
   }
 }
 
@@ -126,6 +162,14 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
 
   const pluginFn: FastifyPluginAsync<XRayFastifyOptions> = fp(
     async function xrayPluginFn(instance) {
+      // Disabled means a true no-op: register nothing except the
+      // decorator (so `instance.xray` stays reachable for tests). The
+      // muted core's startRequest throws, so no hook may call it.
+      if (!core.options.enabled) {
+        instance.decorate('xray', core);
+        return;
+      }
+
       let dashboardMounted = false;
       let mountTarget: FastifyInstance['server'] | null = null;
 
@@ -140,29 +184,117 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
         }
         mountTarget = server;
         try {
-          if (assetsDir !== null) {
-            core.mount(server, { assetsDir });
-          } else {
-            core.mount(server);
-          }
+          // When this plugin registers the dashboard routes itself,
+          // core must not add its own 'request' listener — it would
+          // race Fastify's 404 handler for the same response. With
+          // `skipDashboard` the host app owns the routes, so core's
+          // listener stays on as a fallback.
+          core.mount(server, {
+            ...(skipDashboard ? {} : { serveHttp: false }),
+            ...(assetsDir !== null ? { assetsDir } : {}),
+          });
           dashboardMounted = true;
         } catch (err) {
           core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
         }
       };
 
-      // Dashboard HTML route. Registered before any user routes so
-      // it takes precedence over Fastify's 404 handler. The HTML is
-      // read from `@node-xray/dashboard`'s `assets/` directory on
-      // first hit and cached in memory.
+      // Auth gate shared by the dashboard HTML and asset routes.
+      // 401 (+ WWW-Authenticate for basic) on failure; a throwing
+      // custom `verify` becomes a 500 via `onError`.
+      const withDashboardAuth = async (
+        request: FastifyRequest,
+        reply: FastifyReply,
+        send: () => Promise<void> | void,
+      ): Promise<void> => {
+        const auth = core.options.auth;
+        if (!auth) {
+          await send();
+          return;
+        }
+        let ok = false;
+        try {
+          ok = await verifyDashboardAuth(
+            {
+              url: request.url,
+              method: request.method,
+              headers: request.headers as Record<string, string | string[] | undefined>,
+              socket: {
+                ...(request.socket?.remoteAddress
+                  ? { remoteAddress: request.socket.remoteAddress }
+                  : {}),
+              },
+            },
+            auth,
+          );
+        } catch (err) {
+          core.options.onError(err instanceof Error ? err : new Error(String(err)), {
+            url: request.url,
+            method: request.method,
+          });
+          await reply.code(500).type('text/plain; charset=utf-8').send('Internal Server Error');
+          return;
+        }
+        if (!ok) {
+          if (auth.type === 'basic') {
+            void reply.header('www-authenticate', 'Basic realm="node-xray"');
+          }
+          await reply.code(401).type('text/plain; charset=utf-8').send('Unauthorized');
+          return;
+        }
+        await send();
+      };
+
+      // Dashboard routes (HTML + static assets). Registered on the
+      // Fastify instance so they take precedence over Fastify's 404
+      // handler — core's raw 'request' listener cannot win that race,
+      // which is why `serveHttp: false` is passed to `core.mount()`.
       if (!skipDashboard) {
         const cachedHtml = loadDashboardHtml(path, assetsDir);
-        instance.get(path, (_req, reply) => {
-          applyDashboardSecurityHeaders(reply.raw);
-          reply
-            .header('cache-control', 'no-cache')
-            .type('text/html; charset=utf-8')
-            .send(cachedHtml);
+        instance.get(path, async (request, reply) => {
+          await withDashboardAuth(request, reply, async () => {
+            applyDashboardSecurityHeaders(reply.raw);
+            await reply
+              .header('cache-control', 'no-cache')
+              .type('text/html; charset=utf-8')
+              .send(cachedHtml);
+          });
+        });
+
+        const serveAsset = async (
+          request: FastifyRequest,
+          reply: FastifyReply,
+          rel: string,
+        ): Promise<void> => {
+          await withDashboardAuth(request, reply, async () => {
+            if (rel.includes('..') || rel.startsWith('/') || rel.includes('\\')) {
+              await reply.code(400).type('text/plain; charset=utf-8').send('bad request');
+              return;
+            }
+            const asset = loadAsset(rel, assetsDir);
+            if (asset === null) {
+              await reply.code(404).type('text/plain; charset=utf-8').send('not found');
+              return;
+            }
+            await reply
+              .header('cache-control', 'public, max-age=3600')
+              .type(asset.mime)
+              .send(asset.body);
+          });
+        };
+        instance.get(`${path}/app.js`, (request, reply) => serveAsset(request, reply, 'app.js'));
+        instance.get(`${path}/styles.css`, (request, reply) =>
+          serveAsset(request, reply, 'styles.css'),
+        );
+        instance.get(`${path}/assets/*`, (request, reply) => {
+          const rel = (request.params as Record<string, string | undefined>)['*'] ?? '';
+          return serveAsset(request, reply, rel);
+        });
+        // A plain HTTP GET on the WS endpoint (no Upgrade header)
+        // never reaches the 'upgrade' listener; answer 426 like the
+        // Express adapter instead of a confusing 404.
+        instance.get(`${path}/ws`, async (_request, reply) => {
+          await reply.code(426).header('connection', 'close').send('Upgrade Required');
         });
       }
 
@@ -206,7 +338,25 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
         }
 
         (request as FastifyRequest & { [RECORD_ON_REQ]?: typeof record })[RECORD_ON_REQ] = record;
-        done();
+
+        // Propagate the async context: `done()` continues the request
+        // lifecycle (remaining hooks, the handler, every await inside
+        // it) within this ALS scope — the standard Fastify pattern.
+        // `ctx.tags` IS `record.tags` (also the `withTags`
+        // accumulator), so tag writes land on the final record.
+        const ctx: XRayContext = {
+          requestId: record.id,
+          traceId: record.id,
+          spanId: record.id,
+          framework: 'fastify',
+          ...(request.routeOptions?.url ? { route: request.routeOptions.url } : {}),
+          method: request.method.toLowerCase(),
+          path: splitPath(request.url),
+          startedAt: process.hrtime.bigint(),
+          tags: record.tags,
+          refs: new Map<string, unknown>([[RECORD_TAGS_REF, record.tags]]),
+        };
+        runWithContext(ctx, done);
       });
 
       // Capture the request body AFTER Fastify's body parser has

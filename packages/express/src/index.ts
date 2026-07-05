@@ -3,11 +3,14 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import type { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
-import type { XRayOptions, SnapshotSide } from '@node-xray/types';
+import type { XRayOptions, SnapshotSide, XRayContext } from '@node-xray/types';
 import {
   createCore,
   redactHeaders,
   applyDashboardSecurityHeaders,
+  verifyDashboardAuth,
+  runWithContext,
+  RECORD_TAGS_REF,
   type Core,
   type SerializedError,
 } from '@node-xray/core';
@@ -194,15 +197,57 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     }
     mountTarget = server;
     try {
-      if (assetsDir !== null) {
-        core.mount(server, { assetsDir });
-      } else {
-        core.mount(server);
-      }
+      // The middleware serves the dashboard HTML/assets itself (it
+      // must beat Express's 404 handler), so only the WebSocket side
+      // is mounted on the raw server. One writer per response.
+      core.mount(server, { serveHttp: false, ...(assetsDir !== null ? { assetsDir } : {}) });
       dashboardMounted = true;
     } catch (err) {
       core.options.onError(err instanceof Error ? err : new Error(String(err)), undefined);
     }
+  };
+
+  // Auth gate for the dashboard HTML/assets served by the middleware.
+  // Mirrors the core listener's behavior: 401 (+ WWW-Authenticate for
+  // basic) on failure; a throwing custom `verify` becomes a 500 via
+  // `onError`, never an unhandled rejection.
+  const withDashboardAuth = (req: Request, res: Response, send: () => void): void => {
+    const auth = core.options.auth;
+    if (!auth) {
+      send();
+      return;
+    }
+    void verifyDashboardAuth(
+      {
+        url: req.url,
+        method: req.method,
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        socket: {
+          ...(req.socket?.remoteAddress ? { remoteAddress: req.socket.remoteAddress } : {}),
+        },
+      },
+      auth,
+    )
+      .then((ok) => {
+        if (ok) {
+          send();
+          return;
+        }
+        res.statusCode = 401;
+        if (auth.type === 'basic') {
+          res.setHeader('www-authenticate', 'Basic realm="node-xray"');
+        }
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('Unauthorized');
+      })
+      .catch((err: unknown) => {
+        core.options.onError(err instanceof Error ? err : new Error(String(err)), {
+          url: req.url,
+          method: req.method,
+        });
+        res.statusCode = 500;
+        res.end('Internal Server Error');
+      });
   };
 
   const handler: RequestHandler = function xrayMiddleware(
@@ -210,32 +255,34 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
     res: Response,
     next: NextFunction,
   ): void {
+    // 0. Disabled means a true no-op: no dashboard, no record, no
+    //    onError noise. The muted core's startRequest throws, so we
+    //    must never reach it.
+    if (!core.options.enabled) {
+      next();
+      return;
+    }
+
     // 1. Serve the dashboard HTML if the path matches. This is done
-    //    here (and not in the http.Server's 'request' listener) so
-    //    we run before Express's 404 handler. The HTML is read from
-    //    `@node-xray/dashboard`'s `assets/` directory on first hit.
+    //    here (and not in an http.Server 'request' listener) so we
+    //    run before Express's 404 handler; `core.mount()` is told
+    //    `serveHttp: false`, so this middleware is the only writer.
     const dashboardPath = core.options.path;
     if (req.path === dashboardPath || req.path === `${dashboardPath}/`) {
-      const html = loadIndexHtml(dashboardPath, assetsDir);
-      applyDashboardSecurityHeaders(res);
-      res.setHeader('content-type', 'text/html; charset=utf-8');
-      res.setHeader('cache-control', 'no-cache');
-      res.statusCode = 200;
-      res.end(html);
-      // The http.Server's 'request' listener (added later by
-      // `core.mount()`) also tries to handle this path. Neutralize
-      // its ability to write so it doesn't throw ERR_HTTP_HEADERS_SENT.
-      res.setHeader = (): Response => res;
-      res.end = (): Response => res;
-      // Make sure the core's listener is registered so the static
-      // assets (app.js, styles.css) are served for subsequent
-      // requests. Without this, the first request to the dashboard
-      // would short-circuit here and the listener would never be
-      // added.
+      // Mount first so the WebSocket upgrade handler is live before
+      // the page's client connects.
       const server = (req.socket as unknown as { server?: HttpServer })?.server;
       if (!dashboardMounted) {
         tryMountDashboard(server);
       }
+      withDashboardAuth(req, res, () => {
+        const html = loadIndexHtml(dashboardPath, assetsDir);
+        applyDashboardSecurityHeaders(res);
+        res.setHeader('content-type', 'text/html; charset=utf-8');
+        res.setHeader('cache-control', 'no-cache');
+        res.statusCode = 200;
+        res.end(html);
+      });
       return;
     }
     if (req.path === `${dashboardPath}/ws`) {
@@ -249,11 +296,7 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
 
     // 1b. Serve the dashboard's static assets (app.js, styles.css,
     //     anything under /assets/*) here, before Express's 404
-    //     handler. The core's 'request' listener would also try to
-    //     handle these, but it does so via an async `authorize().then()`
-    //     callback, which fires AFTER Express's synchronous 404
-    //     handler and crashes with ERR_HTTP_HEADERS_SENT. Serving
-    //     the assets here and neutralizing `res` is the fix.
+    //     handler. Same single-writer rule as the HTML branch.
     if (
       req.path === `${dashboardPath}/app.js` ||
       req.path === `${dashboardPath}/styles.css` ||
@@ -265,24 +308,28 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
           : req.path === `${dashboardPath}/styles.css`
             ? 'styles.css'
             : req.path.slice(`${dashboardPath}/assets/`.length);
-      const asset = loadAsset(rel, assetsDir);
-      if (asset !== null) {
-        res.statusCode = 200;
-        res.setHeader('content-type', asset.mime);
-        res.setHeader('cache-control', 'public, max-age=3600');
-        res.end(asset.body);
-        // Neutralize so the core's later 'request' listener does not
-        // crash with ERR_HTTP_HEADERS_SENT.
-        res.setHeader = (): Response => res;
-        res.end = (): Response => res;
-        const server = (req.socket as unknown as { server?: HttpServer })?.server;
-        if (!dashboardMounted) {
-          tryMountDashboard(server);
-        }
-      } else {
-        res.statusCode = 404;
-        res.end('not found');
+      const server = (req.socket as unknown as { server?: HttpServer })?.server;
+      if (!dashboardMounted) {
+        tryMountDashboard(server);
       }
+      withDashboardAuth(req, res, () => {
+        // Reject traversal before touching the filesystem.
+        if (rel.includes('..') || rel.startsWith('/') || rel.includes('\\')) {
+          res.statusCode = 400;
+          res.end('bad request');
+          return;
+        }
+        const asset = loadAsset(rel, assetsDir);
+        if (asset !== null) {
+          res.statusCode = 200;
+          res.setHeader('content-type', asset.mime);
+          res.setHeader('cache-control', 'public, max-age=3600');
+          res.end(asset.body);
+        } else {
+          res.statusCode = 404;
+          res.end('not found');
+        }
+      });
       return;
     }
 
@@ -378,7 +425,23 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
       }
     });
 
-    next();
+    // 8. Propagate the async context. Everything downstream of this
+    //    middleware — handlers, awaits, timers, DB callbacks — sees
+    //    the request via `getContext()`. `ctx.tags` IS `record.tags`
+    //    (same object, also registered as the `withTags` accumulator),
+    //    so tag writes land on the final record without a merge step.
+    const ctx: XRayContext = {
+      requestId: record.id,
+      traceId: record.id,
+      spanId: record.id,
+      framework: 'express',
+      method: req.method.toLowerCase(),
+      path: req.path,
+      startedAt: process.hrtime.bigint(),
+      tags: record.tags,
+      refs: new Map<string, unknown>([[RECORD_TAGS_REF, record.tags]]),
+    };
+    runWithContext(ctx, next);
   };
 
   const handle = handler as XRayExpressHandle;

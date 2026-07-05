@@ -19,11 +19,17 @@
 (function () {
   'use strict';
 
-  // ── config injected by core at serve-time ──────────────────────────
-  // The server replaces __DASHBOARD_PATH__ with the configured path
-  // (e.g. "/node-xray"). The script is loaded from `<path>/app.js`,
-  // so the same-origin origin + path is the WS endpoint.
-  const path = (typeof window !== 'undefined' && window.__XRAY_DASHBOARD_PATH__) || '/node-xray';
+  // ── dashboard path ──────────────────────────────────────────────────
+  // The HTML is served at `<path>`, `<path>/`, or `<path>/index.html`,
+  // so the configured mount path is derived from the page URL itself —
+  // custom paths need no server-side injection. A server may still
+  // override via `window.__XRAY_DASHBOARD_PATH__` (PATH_INJECTOR_SCRIPT
+  // in @node-xray/dashboard).
+  const derivedPath = window.location.pathname.replace(/\/(index\.html)?$/, '');
+  const path =
+    (typeof window !== 'undefined' && window.__XRAY_DASHBOARD_PATH__) ||
+    derivedPath ||
+    '/node-xray';
   const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = wsScheme + '//' + window.location.host + path + '/ws';
 

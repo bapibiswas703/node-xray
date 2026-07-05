@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { xrayPlugin } from './index.js';
-import { _clearAllForTest } from '@node-xray/core';
+import { _clearAllForTest, getContext, withTags } from '@node-xray/core';
 
 let app: FastifyInstance;
 let xrayInstance: Awaited<ReturnType<typeof xrayPlugin>>;
@@ -293,6 +293,127 @@ describe('@node-xray/fastify', () => {
 
       // Muted core has a 1-slot store
       expect(localXray.core.store.size).toBeLessThanOrEqual(1);
+      await localApp.close();
+    });
+
+    it('enabled: false never calls onError and registers no dashboard route', async () => {
+      _clearAllForTest();
+      const onError = vi.fn();
+      const localXray = xrayPlugin({ enabled: false, onError });
+      const localApp = Fastify({ logger: false });
+      await localApp.register(localXray);
+      localApp.get('/api/x', async () => ({ ok: true }));
+
+      await localApp.inject({ method: 'GET', url: '/api/x' });
+      await localApp.inject({ method: 'GET', url: '/api/x' });
+      const dash = await localApp.inject({ method: 'GET', url: '/node-xray' });
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(localXray.core.store.size).toBe(0);
+      expect(dash.statusCode).toBe(404);
+      await localApp.close();
+    });
+  });
+
+  describe('async context propagation (ALS)', () => {
+    it('exposes getContext() inside a handler, across await and setTimeout', async () => {
+      let afterAwait: string | undefined;
+      let inTimer: string | undefined;
+      app.get('/api/ctx', async () => {
+        const atStart = getContext()?.requestId;
+        await Promise.resolve();
+        afterAwait = getContext()?.requestId;
+        await new Promise<void>((r) =>
+          setTimeout(() => {
+            inTimer = getContext()?.requestId;
+            r();
+          }, 5),
+        );
+        return { rid: atStart };
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/api/ctx' });
+      await new Promise((r) => setTimeout(r, 30));
+
+      const rec = xrayInstance.core.store.list().find((r) => r.path === '/api/ctx');
+      expect(rec).toBeDefined();
+      expect((res.json() as { rid?: string }).rid).toBe(rec?.id);
+      expect(afterAwait).toBe(rec?.id);
+      expect(inTimer).toBe(rec?.id);
+    });
+
+    it('persists withTags tags to the finished record', async () => {
+      app.get('/api/tagged', async () => {
+        await withTags({ userId: 42 }, async () => {
+          await Promise.resolve();
+        });
+        return { ok: true };
+      });
+
+      await app.inject({ method: 'GET', url: '/api/tagged' });
+      await new Promise((r) => setTimeout(r, 30));
+
+      const rec = xrayInstance.core.store.list().find((r) => r.path === '/api/tagged');
+      expect(rec?.tags).toMatchObject({ userId: 42 });
+    });
+  });
+
+  describe('dashboard auth', () => {
+    it('401s the dashboard HTML and assets without credentials, 200 with', async () => {
+      _clearAllForTest();
+      const localXray = xrayPlugin({
+        auth: { type: 'basic', user: 'admin', pass: 's3cret' },
+        maxRequests: 10,
+      });
+      const localApp = Fastify({ logger: false });
+      await localApp.register(localXray);
+      localApp.get('/api/x', async () => ({ ok: true }));
+
+      const anon = await localApp.inject({ method: 'GET', url: '/node-xray' });
+      expect(anon.statusCode).toBe(401);
+      expect(anon.headers['www-authenticate']).toMatch(/Basic/);
+
+      const anonJs = await localApp.inject({ method: 'GET', url: '/node-xray/app.js' });
+      expect(anonJs.statusCode).toBe(401);
+
+      const creds = 'Basic ' + Buffer.from('admin:s3cret').toString('base64');
+      const html = await localApp.inject({
+        method: 'GET',
+        url: '/node-xray',
+        headers: { authorization: creds },
+      });
+      expect(html.statusCode).toBe(200);
+      expect(html.headers['content-type']).toMatch(/text\/html/);
+
+      const js = await localApp.inject({
+        method: 'GET',
+        url: '/node-xray/app.js',
+        headers: { authorization: creds },
+      });
+      expect(js.statusCode).toBe(200);
+      expect(js.headers['content-type']).toMatch(/javascript/);
+      await localApp.close();
+    });
+  });
+
+  describe('custom dashboard path', () => {
+    it('serves the HTML and assets at the configured path', async () => {
+      _clearAllForTest();
+      const localXray = xrayPlugin({ path: '/_custom', maxRequests: 10 });
+      const localApp = Fastify({ logger: false });
+      await localApp.register(localXray);
+      localApp.get('/api/x', async () => ({ ok: true }));
+
+      const html = await localApp.inject({ method: 'GET', url: '/_custom' });
+      expect(html.statusCode).toBe(200);
+      expect(html.headers['content-type']).toMatch(/text\/html/);
+
+      const js = await localApp.inject({ method: 'GET', url: '/_custom/app.js' });
+      expect(js.statusCode).toBe(200);
+      // Custom-path regression: the client derives the WS endpoint
+      // from location.pathname instead of hardcoding /node-xray.
+      expect(js.body).toContain('location.pathname');
       await localApp.close();
     });
   });

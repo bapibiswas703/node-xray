@@ -17,6 +17,14 @@ export interface MountOptions {
   /** Allow origins for the WebSocket upgrade. Defaults to same-host. */
   allowOrigins?: readonly string[] | 'all' | 'same-host';
   /**
+   * When `false`, do not register the HTTP `request` listener for the
+   * dashboard HTML/assets — only the WebSocket upgrade handling. Used
+   * by adapters that serve the dashboard routes themselves (inside the
+   * framework's own pipeline, where they can beat its 404 handler)
+   * so there is exactly one writer per response. Defaults to `true`.
+   */
+  serveHttp?: boolean;
+  /**
    * Sink for unexpected internal errors (e.g. a custom auth
    * `verify` that threw). Defaults to `console.error` with a
    * `[node-xray]` prefix. Must not throw.
@@ -126,30 +134,53 @@ export function mountDashboard(
   // `options` again (keeps the type narrowing straightforward).
   const reportError = onError;
 
-  server.on('request', (req: IncomingMessage, res: ServerResponse) => {
+  const requestListener = (req: IncomingMessage, res: ServerResponse): void => {
     if (!req.url) return;
     const url = req.url.split('?')[0] ?? '';
+
+    // Failure isolation: this listener shares the response with the
+    // host framework's own handler (which may 404 the same URL before
+    // an async auth check resolves). A write on an already-answered
+    // response must never escape as an uncaught exception — it would
+    // take down the host process.
+    const safeWrite = (fn: () => void): void => {
+      if (res.headersSent || res.writableEnded) return;
+      try {
+        fn();
+      } catch (err) {
+        reportError(err instanceof Error ? err : new Error(String(err)), {
+          url: req.url ?? '/',
+          method: req.method ?? 'GET',
+        });
+      }
+    };
+
+    if (res.headersSent || res.writableEnded) return;
 
     // Root + canonical index: serve the SPA shell.
     if (url === path || url === `${path}/` || url === `${path}/index.html`) {
       const noAuth = !options.auth;
       const sendHtml = (): void => {
-        const html = cached ? replaceTokens(cached.indexHtml, path) : placeholderFor(path);
-        applySecurityHeaders(res, hasAssets && cached !== null);
-        res.statusCode = cached ? 200 : 503;
-        res.setHeader('content-type', 'text/html; charset=utf-8');
-        res.setHeader('cache-control', 'no-cache');
-        res.end(html);
+        safeWrite(() => {
+          const html = cached ? replaceTokens(cached.indexHtml, path) : placeholderFor(path);
+          applySecurityHeaders(res, hasAssets && cached !== null);
+          res.statusCode = cached ? 200 : 503;
+          res.setHeader('content-type', 'text/html; charset=utf-8');
+          res.setHeader('cache-control', 'no-cache');
+          res.end(html);
+        });
       };
       if (noAuth) {
         sendHtml();
         return;
       }
       void authorize(req, res, (code, body) => {
-        res.statusCode = code;
-        res.setHeader('content-type', 'text/plain; charset=utf-8');
-        res.setHeader('www-authenticate', 'Basic realm="node-xray"');
-        res.end(body);
+        safeWrite(() => {
+          res.statusCode = code;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.setHeader('www-authenticate', 'Basic realm="node-xray"');
+          res.end(body);
+        });
       }).then((ok) => {
         if (ok) sendHtml();
       });
@@ -157,7 +188,9 @@ export function mountDashboard(
     }
 
     // Primary static assets — also require auth so the JS / CSS
-    // are not served to anonymous clients.
+    // are not served to anonymous clients. With no auth configured
+    // the asset is served synchronously, so this listener (prepended
+    // below) deterministically beats the framework's 404 handler.
     if (
       url === `${path}/app.js` ||
       url === `${path}/styles.css` ||
@@ -169,17 +202,28 @@ export function mountDashboard(
           : url === `${path}/styles.css`
             ? 'styles.css'
             : url.slice(`${path}/assets/`.length);
+      if (!options.auth) {
+        safeWrite(() => sendAsset(res, assetsDir, rel));
+        return;
+      }
       void authorize(req, res, (code, body) => {
-        res.statusCode = code;
-        res.setHeader('content-type', 'text/plain; charset=utf-8');
-        res.end(body);
+        safeWrite(() => {
+          res.statusCode = code;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.end(body);
+        });
       }).then((ok) => {
         if (!ok) return;
-        sendAsset(res, assetsDir, rel);
+        safeWrite(() => sendAsset(res, assetsDir, rel));
       });
       return;
     }
-  });
+  };
+  if (options.serveHttp !== false) {
+    // Prepend so the synchronous paths above win the response before
+    // the framework's own request handler can 404 the dashboard URLs.
+    server.prependListener('request', requestListener);
+  }
 
   // Auth + origin check happen at upgrade time, inside `attach`.
   attach(server);
@@ -351,7 +395,36 @@ function checkOrigin(
   return allow.includes(origin);
 }
 
-async function runAuth(req: IncomingMessage, auth: XRayAuth): Promise<boolean> {
+/**
+ * Minimal request shape accepted by `verifyDashboardAuth`. Both raw
+ * `http.IncomingMessage` and framework request objects satisfy it.
+ */
+export interface DashboardAuthInput {
+  url?: string | undefined;
+  method?: string | undefined;
+  headers: Record<string, string | string[] | undefined>;
+  socket?: { remoteAddress?: string | undefined } | undefined;
+}
+
+/**
+ * Run the configured dashboard auth against a request. Returns `true`
+ * when no auth is configured. Adapters MUST call this before serving
+ * the dashboard HTML or assets themselves — the core's own request
+ * listener enforces it, but adapters intentionally answer first (to
+ * beat the framework's 404 handler), so they carry the same duty.
+ *
+ * Exceptions from a custom `verify` propagate; callers translate them
+ * into a 500 via their `onError`.
+ */
+export async function verifyDashboardAuth(
+  req: DashboardAuthInput,
+  auth: XRayAuth | undefined,
+): Promise<boolean> {
+  if (!auth) return true;
+  return runAuth(req, auth);
+}
+
+async function runAuth(req: DashboardAuthInput, auth: XRayAuth): Promise<boolean> {
   const remoteAddress = req.socket?.remoteAddress;
   const normalized: XRayAuthRequest = {
     url: req.url ?? '/',
@@ -359,9 +432,11 @@ async function runAuth(req: IncomingMessage, auth: XRayAuth): Promise<boolean> {
     headers: req.headers as Record<string, string | string[] | undefined>,
     ...(remoteAddress !== undefined ? { remoteAddress } : {}),
   };
+  const rawAuthHeader = req.headers['authorization'];
+  const authHeader = Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : rawAuthHeader;
   switch (auth.type) {
     case 'basic': {
-      const header = req.headers['authorization'];
+      const header = authHeader;
       if (!header) return false;
       const [scheme, value] = header.split(' ');
       if (scheme?.toLowerCase() !== 'basic' || !value) return false;
@@ -373,7 +448,7 @@ async function runAuth(req: IncomingMessage, auth: XRayAuth): Promise<boolean> {
       return constantTimeEqual(user, auth.user) && constantTimeEqual(pass, auth.pass);
     }
     case 'bearer': {
-      const header = req.headers['authorization'];
+      const header = authHeader;
       if (!header) return false;
       const [scheme, value] = header.split(' ');
       if (scheme?.toLowerCase() !== 'bearer' || !value) return false;

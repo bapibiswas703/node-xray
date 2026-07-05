@@ -25,9 +25,11 @@ export interface Core {
   /**
    * Start the WebSocket hub and (optionally) the dashboard UI on a
    * Node `http.Server`. Pass `assetsDir` to enable the dashboard
-   * route; without it the route returns a 503 placeholder.
+   * route; without it the route returns a 503 placeholder. Pass
+   * `serveHttp: false` when the adapter serves the dashboard HTML and
+   * assets itself and only the WebSocket side is wanted here.
    */
-  mount(server: HttpServer, options?: { assetsDir?: string }): void;
+  mount(server: HttpServer, options?: { assetsDir?: string; serveHttp?: boolean }): void;
   /** Stop everything (loop monitor, hub, store). */
   close(): Promise<void>;
   /** Internal helpers used by adapters. */
@@ -189,6 +191,7 @@ export function createCore(options: XRayOptions = {}): Core {
       mountDashboard(server, (s) => hub.attach(s), {
         path: resolved.path,
         ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}),
+        ...(opts?.serveHttp === false ? { serveHttp: false } : {}),
         ...(resolved.auth ? { auth: resolved.auth } : {}),
         onError: resolved.onError,
       });

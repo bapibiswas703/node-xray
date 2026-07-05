@@ -12,7 +12,14 @@ export type { Core, CoreInternals, StartRequestInput, FinishRequestInput } from 
 export { resolveOptions } from './config.js';
 export type { ResolvedOptions } from './config.js';
 
-export { getContext, getContextOrThrow, withTags, withContext, runWithContext } from './context.js';
+export {
+  getContext,
+  getContextOrThrow,
+  withTags,
+  withContext,
+  runWithContext,
+  RECORD_TAGS_REF,
+} from './context.js';
 
 export { on, off, emit, listenerCount, _clearAllForTest } from './events.js';
 
@@ -30,8 +37,8 @@ export type { StoreOptions } from './store.js';
 export { createHub, parseClientFrame } from './ws.js';
 export type { HubOptions, HubHandle, HelloConfigData, HelloServerData } from './ws.js';
 
-export { mountDashboard, applyDashboardSecurityHeaders } from './dashboard.js';
-export type { MountOptions } from './dashboard.js';
+export { mountDashboard, applyDashboardSecurityHeaders, verifyDashboardAuth } from './dashboard.js';
+export type { MountOptions, DashboardAuthInput } from './dashboard.js';
 
 export {
   XRayError,

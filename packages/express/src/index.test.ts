@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
 import type { Server as HttpServer } from 'node:http';
 import { xray } from './index.js';
-import { _clearAllForTest } from '@node-xray/core';
+import { _clearAllForTest, getContext, withTags } from '@node-xray/core';
 
 let app: Express;
 let server: HttpServer;
@@ -365,6 +365,147 @@ describe('@node-xray/express', () => {
 
       // Muted core has a 1-slot store
       expect(localXray.store.size).toBeLessThanOrEqual(1);
+    });
+
+    it('enabled: false never calls onError and records nothing', async () => {
+      _clearAllForTest();
+      const onError = vi.fn();
+      const localXray = xray({ enabled: false, onError });
+      const localApp = express();
+      localApp.use(express.json());
+      localApp.use(localXray);
+      localApp.get('/api/x', (_req, res) => res.json({ ok: true }));
+      server = localApp.listen(0);
+
+      await request(server).get('/api/x');
+      await request(server).get('/api/x');
+      // The dashboard is not mounted either: plain 404 pass-through.
+      const dash = await request(server).get('/node-xray');
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(localXray.store.size).toBe(0);
+      expect(dash.status).toBe(404);
+    });
+  });
+
+  describe('async context propagation (ALS)', () => {
+    it('exposes getContext() inside a handler, across await and setTimeout', async () => {
+      let atStart: string | undefined;
+      let afterAwait: string | undefined;
+      let inTimer: string | undefined;
+      app.get('/api/ctx', async (_req, res) => {
+        atStart = getContext()?.requestId;
+        await Promise.resolve();
+        afterAwait = getContext()?.requestId;
+        await new Promise<void>((r) =>
+          setTimeout(() => {
+            inTimer = getContext()?.requestId;
+            r();
+          }, 5),
+        );
+        res.json({ ok: true });
+      });
+      server = app.listen(0);
+
+      await request(server).get('/api/ctx');
+      await new Promise((r) => setTimeout(r, 50));
+
+      const rec = xrayInstance.store.list().find((r) => r.path === '/api/ctx');
+      expect(rec).toBeDefined();
+      expect(atStart).toBe(rec?.id);
+      expect(afterAwait).toBe(rec?.id);
+      expect(inTimer).toBe(rec?.id);
+    });
+
+    it('persists withTags tags to the finished record', async () => {
+      app.get('/api/tagged', async (_req, res) => {
+        await withTags({ userId: 42, plan: 'pro' }, async () => {
+          await Promise.resolve();
+        });
+        res.json({ ok: true });
+      });
+      server = app.listen(0);
+
+      await request(server).get('/api/tagged');
+      await new Promise((r) => setTimeout(r, 50));
+
+      const rec = xrayInstance.store.list().find((r) => r.path === '/api/tagged');
+      expect(rec?.tags).toMatchObject({ userId: 42, plan: 'pro' });
+    });
+
+    it('direct getContext() tag writes land on the record', async () => {
+      app.get('/api/tagged2', (_req, res) => {
+        const ctx = getContext();
+        if (ctx) ctx.tags['direct'] = true;
+        res.json({ ok: true });
+      });
+      server = app.listen(0);
+
+      await request(server).get('/api/tagged2');
+      await new Promise((r) => setTimeout(r, 50));
+
+      const rec = xrayInstance.store.list().find((r) => r.path === '/api/tagged2');
+      expect(rec?.tags['direct']).toBe(true);
+    });
+  });
+
+  describe('dashboard auth', () => {
+    const authed = (): ReturnType<typeof xray> =>
+      xray({ auth: { type: 'basic', user: 'admin', pass: 's3cret' }, maxRequests: 10 });
+
+    it('401s the dashboard HTML and assets without credentials', async () => {
+      _clearAllForTest();
+      const localXray = authed();
+      const localApp = express();
+      localApp.use(localXray);
+      localApp.get('/api/x', (_req, res) => res.json({ ok: true }));
+      server = localApp.listen(0);
+
+      const html = await request(server).get('/node-xray');
+      expect(html.status).toBe(401);
+      expect(html.headers['www-authenticate']).toMatch(/Basic/);
+
+      const js = await request(server).get('/node-xray/app.js');
+      expect(js.status).toBe(401);
+    });
+
+    it('serves the dashboard HTML and assets with valid basic credentials', async () => {
+      _clearAllForTest();
+      const localXray = authed();
+      const localApp = express();
+      localApp.use(localXray);
+      localApp.get('/api/x', (_req, res) => res.json({ ok: true }));
+      server = localApp.listen(0);
+
+      const html = await request(server).get('/node-xray').auth('admin', 's3cret');
+      expect(html.status).toBe(200);
+      expect(html.headers['content-type']).toMatch(/text\/html/);
+
+      const js = await request(server).get('/node-xray/app.js').auth('admin', 's3cret');
+      expect(js.status).toBe(200);
+      expect(js.headers['content-type']).toMatch(/javascript/);
+    });
+  });
+
+  describe('custom dashboard path', () => {
+    it('serves the HTML and assets at the configured path', async () => {
+      _clearAllForTest();
+      const localXray = xray({ path: '/_custom', maxRequests: 10 });
+      const localApp = express();
+      localApp.use(localXray);
+      localApp.get('/api/x', (_req, res) => res.json({ ok: true }));
+      server = localApp.listen(0);
+
+      const html = await request(server).get('/_custom');
+      expect(html.status).toBe(200);
+      expect(html.headers['content-type']).toMatch(/text\/html/);
+
+      const js = await request(server).get('/_custom/app.js');
+      expect(js.status).toBe(200);
+      // The client must not hardcode the default path: it derives the
+      // WS endpoint from location.pathname (custom-path regression).
+      expect(js.text).toContain('location.pathname');
     });
   });
 });

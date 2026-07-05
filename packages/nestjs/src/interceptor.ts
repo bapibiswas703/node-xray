@@ -7,9 +7,17 @@ import {
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
-import { tap, catchError, throwError, EMPTY, type Observable } from 'rxjs';
+import { tap, catchError, throwError, EMPTY, Observable, type Subscription } from 'rxjs';
 import type { Core, SerializedError } from '@node-xray/core';
-import { redactHeaders, redactSnapshot, applyDashboardSecurityHeaders } from '@node-xray/core';
+import type { XRayContext } from '@node-xray/types';
+import {
+  redactHeaders,
+  redactSnapshot,
+  applyDashboardSecurityHeaders,
+  verifyDashboardAuth,
+  runWithContext,
+  RECORD_TAGS_REF,
+} from '@node-xray/core';
 import type { XRayRequest, XRayResponse } from './types.js';
 import { XRAY_REQUEST_KEY, XRAY_RESPONSE_KEY } from './symbols.js';
 import { XRAY_CORE } from './service.js';
@@ -97,9 +105,10 @@ export class XrayInterceptor implements NestInterceptor {
       // respond to this and any subsequent request to the dashboard.
       this.maybeMountDashboard(request);
       // If the prepend listener didn't respond (e.g. fastify raw
-      // server), fall back to responding inline.
+      // server), fall back to responding inline — behind the same
+      // auth gate the prepend listener enforces.
       if (response.statusCode !== 200) {
-        respondDashboard(response as unknown as DashboardResponse, dashboardPath, this.assetsDir);
+        void this.respondDashboardAuthed(request, response as unknown as DashboardResponse);
       }
       return EMPTY;
     }
@@ -162,25 +171,53 @@ export class XrayInterceptor implements NestInterceptor {
     // can find it without a closure.
     (request as XRayRequest & { [XRAY_REQUEST_KEY]?: typeof record })[XRAY_REQUEST_KEY] = record;
 
-    return next.handle().pipe(
-      tap((body) => {
-        // Capture the response body (the value emitted by the handler).
-        if (body !== undefined && this.core.options.captureResponseBody) {
-          (response as XRayResponse & { [XRAY_RESPONSE_KEY]?: unknown })[XRAY_RESPONSE_KEY] = body;
-        }
-      }),
-      tap({
-        next: () => {
-          // Defer so NestJS's exception filter has time to write the
-          // response (and thus set statusCode) before we read it.
-          setTimeout(() => this.finalize(request, response, undefined), 0);
-        },
-        error: (err: unknown) => {
-          setTimeout(() => this.finalize(request, response, err), 0);
-        },
-      }),
-      catchError((err: unknown) => throwError(() => err)),
-    );
+    // Propagate the async context. Nest's `next.handle()` starts the
+    // route handler the moment it is CALLED (it wraps an already-
+    // running promise, not a deferred one), so both the `handle()`
+    // call and the subscription happen inside `runWithContext`.
+    // `ctx.tags` IS `record.tags` (also the `withTags` accumulator),
+    // so tag writes land on the final record without a merge step.
+    const ctx: XRayContext = {
+      requestId: record.id,
+      traceId: record.id,
+      spanId: record.id,
+      framework: 'nestjs',
+      ...(route ? { route } : {}),
+      method,
+      path,
+      startedAt: process.hrtime.bigint(),
+      tags: record.tags,
+      refs: new Map<string, unknown>([[RECORD_TAGS_REF, record.tags]]),
+    };
+    return new Observable<unknown>((subscriber) => {
+      let sub: Subscription | undefined;
+      runWithContext(ctx, () => {
+        sub = next
+          .handle()
+          .pipe(
+            tap((body) => {
+              // Capture the response body (the value emitted by the handler).
+              if (body !== undefined && this.core.options.captureResponseBody) {
+                (response as XRayResponse & { [XRAY_RESPONSE_KEY]?: unknown })[XRAY_RESPONSE_KEY] =
+                  body;
+              }
+            }),
+            tap({
+              next: () => {
+                // Defer so NestJS's exception filter has time to write
+                // the response (and thus set statusCode) before we read it.
+                setTimeout(() => this.finalize(request, response, undefined), 0);
+              },
+              error: (err: unknown) => {
+                setTimeout(() => this.finalize(request, response, err), 0);
+              },
+            }),
+            catchError((err: unknown) => throwError(() => err)),
+          )
+          .subscribe(subscriber);
+      });
+      return () => sub?.unsubscribe();
+    });
   }
 
   private maybeMountDashboard(request: XRayRequest & { socket?: { server?: unknown } }): void {
@@ -212,44 +249,122 @@ export class XrayInterceptor implements NestInterceptor {
           }
         ).prependListener;
         if (typeof prependListener === 'function') {
+          const core = this.core;
+          const assetsDir = this.assetsDir;
           prependListener.call(server, 'request', ((
-            req: { url?: string },
+            req: {
+              url?: string;
+              method?: string;
+              headers?: Record<string, string | string[] | undefined>;
+              socket?: { remoteAddress?: string };
+            },
             res: {
               setHeader?: (n: string, v: string) => void;
-              set?: (n: string, v: string) => void;
               statusCode: number;
               end?: (chunk?: string) => void;
-              send?: (body?: string) => void;
               headersSent?: boolean;
             },
           ) => {
             const url = (req.url ?? '').split('?')[0] ?? '';
             if (url !== dashboardPath && url !== `${dashboardPath}/`) return;
-            if (res.statusCode === 404) res.statusCode = 200;
-            const setHeader = (n: string, v: string): void => {
-              if (res.setHeader) {
-                res.setHeader(n, v);
-              } else {
-                res.set?.(n, v);
-              }
-            };
-            applyDashboardSecurityHeaders(
-              res as unknown as Parameters<typeof applyDashboardSecurityHeaders>[0],
-            );
-            setHeader('content-type', 'text/html; charset=utf-8');
-            setHeader('cache-control', 'no-cache');
-            const html = loadDashboardHtml(dashboardPath, this.assetsDir);
-            if (res.send) {
-              res.send(html);
-            } else {
-              res.end?.(html);
-            }
-            // Neutralize further header writes and end() so the
-            // core's appended listener (added by `core.mount()`)
-            // does not throw when it tries to set its own headers
-            // or end the response.
+            const method = (req.method ?? 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD') return;
+            // Core's own listener is prepended AFTER this one (so it
+            // runs first) and serves the no-auth HTML synchronously.
+            // If the response is already answered, this listener has
+            // nothing to do.
+            if (res.headersSent) return;
+
+            // Take ownership of the response NOW. The auth check is
+            // async, and the framework's own 404 handler (plus core's
+            // appended listener) would otherwise write first. All
+            // writers are neutralized synchronously; the real ones are
+            // used below once auth has been decided.
+            const rawSetHeader = res.setHeader?.bind(res);
+            const rawEnd = res.end?.bind(res);
             res.setHeader = (): void => {};
             res.end = (): void => {};
+
+            const finish = (
+              status: number,
+              headers: Record<string, string>,
+              body: string,
+            ): void => {
+              // Core's own (prepended) listener may have answered this
+              // request already — e.g. the no-auth HTML fast path.
+              if (res.headersSent) return;
+              try {
+                res.statusCode = status;
+                for (const [n, v] of Object.entries(headers)) rawSetHeader?.(n, v);
+                rawEnd?.(body);
+              } catch (err) {
+                core.options.onError(err instanceof Error ? err : new Error(String(err)), {
+                  url,
+                  method,
+                });
+              }
+            };
+
+            void (async () => {
+              const auth = core.options.auth;
+              if (auth) {
+                let ok = false;
+                try {
+                  ok = await verifyDashboardAuth(
+                    {
+                      url: req.url ?? '/',
+                      method,
+                      headers: req.headers ?? {},
+                      socket: {
+                        ...(req.socket?.remoteAddress
+                          ? { remoteAddress: req.socket.remoteAddress }
+                          : {}),
+                      },
+                    },
+                    auth,
+                  );
+                } catch (err) {
+                  core.options.onError(err instanceof Error ? err : new Error(String(err)), {
+                    url,
+                    method,
+                  });
+                  finish(
+                    500,
+                    { 'content-type': 'text/plain; charset=utf-8' },
+                    'Internal Server Error',
+                  );
+                  return;
+                }
+                if (!ok) {
+                  finish(
+                    401,
+                    {
+                      'content-type': 'text/plain; charset=utf-8',
+                      ...(auth.type === 'basic'
+                        ? { 'www-authenticate': 'Basic realm="node-xray"' }
+                        : {}),
+                    },
+                    'Unauthorized',
+                  );
+                  return;
+                }
+              }
+              if (!res.headersSent) {
+                try {
+                  applyDashboardSecurityHeaders({
+                    setHeader: (n: string, v: string) => rawSetHeader?.(n, v),
+                  } as unknown as Parameters<typeof applyDashboardSecurityHeaders>[0]);
+                } catch {
+                  // Response was claimed between the check and the
+                  // write; `finish` below no-ops on headersSent.
+                }
+              }
+              finish(
+                200,
+                { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' },
+                loadDashboardHtml(dashboardPath, assetsDir),
+              );
+            })();
           }) as (...args: unknown[]) => void);
         }
 
@@ -266,6 +381,55 @@ export class XrayInterceptor implements NestInterceptor {
         return;
       }
     }
+  }
+
+  /** Auth-gated variant of `respondDashboard` for the inline fallback. */
+  private async respondDashboardAuthed(
+    request: XRayRequest,
+    response: DashboardResponse,
+  ): Promise<void> {
+    const auth = this.core.options.auth;
+    const sendStatus = (code: number, headers: Record<string, string>, body: string): void => {
+      response.statusCode = code;
+      for (const [n, v] of Object.entries(headers)) {
+        if (response.setHeader) response.setHeader(n, v);
+        else response.set?.(n, v);
+      }
+      if (response.send) response.send(body);
+      else response.end?.(body);
+    };
+    if (auth) {
+      let ok = false;
+      try {
+        ok = await verifyDashboardAuth(
+          {
+            url: request.url ?? '/',
+            method: (request.method ?? 'GET').toUpperCase(),
+            headers: (request.headers ?? {}) as Record<string, string | string[] | undefined>,
+          },
+          auth,
+        );
+      } catch (err) {
+        this.core.options.onError(err instanceof Error ? err : new Error(String(err)), {
+          url: request.url ?? '/',
+          method: request.method ?? 'GET',
+        });
+        sendStatus(500, { 'content-type': 'text/plain; charset=utf-8' }, 'Internal Server Error');
+        return;
+      }
+      if (!ok) {
+        sendStatus(
+          401,
+          {
+            'content-type': 'text/plain; charset=utf-8',
+            ...(auth.type === 'basic' ? { 'www-authenticate': 'Basic realm="node-xray"' } : {}),
+          },
+          'Unauthorized',
+        );
+        return;
+      }
+    }
+    respondDashboard(response, this.core.options.path, this.assetsDir);
   }
 
   private deriveRoute(context: ExecutionContext, request: XRayRequest): string | undefined {

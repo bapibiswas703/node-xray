@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { getContext, getContextOrThrow, withTags, withContext, runWithContext } from './context.js';
+import {
+  getContext,
+  getContextOrThrow,
+  withTags,
+  withContext,
+  runWithContext,
+  RECORD_TAGS_REF,
+} from './context.js';
 import { XRayNoContextError } from './errors.js';
 import type { XRayContext } from '@node-xray/types';
 
@@ -45,6 +52,23 @@ describe('context', () => {
       return 'done';
     });
     expect(result).toBe('done');
+  });
+
+  it('withTags writes into the RECORD_TAGS_REF accumulator so tags outlive the scope', async () => {
+    const acc: Record<string, string | number | boolean> = {};
+    const parent = makeContext({
+      tags: {},
+      refs: new Map<string, unknown>([[RECORD_TAGS_REF, acc]]),
+    });
+    await runWithContext(parent, async () => {
+      await withTags({ userId: 42 }, async () => {
+        await withTags({ nested: true }, async () => {
+          /* scoped */
+        });
+      });
+    });
+    // The lexical scopes are gone, but the accumulator kept everything.
+    expect(acc).toEqual({ userId: 42, nested: true });
   });
 
   it('withTags is a no-op when no context is active', async () => {
