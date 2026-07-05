@@ -48,3 +48,13 @@ bench/results/
 
 # npm pack artifacts
 *.tgz
+
+# AI assistant / internal-only files (not for the public repo)
+.claude/
+CLAUDE.md
+.mcp.json
+docs/AUDIT.md
+.cursor/
+.cursorrules
+.aider*
+.windsurfrules
