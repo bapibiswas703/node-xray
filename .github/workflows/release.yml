@@ -22,6 +22,7 @@ jobs:
     # attestation that npm attaches to each published package.
     permissions:
       contents: write
+      pull-requests: write
       id-token: write
 
     steps:
