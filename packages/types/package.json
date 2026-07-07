@@ -2,6 +2,14 @@
   "name": "@node-xray/types",
   "version": "0.2.1",
   "description": "Public type contracts for node-xray",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bapibiswas703/node-xray"
+  },
+  "homepage": "https://github.com/bapibiswas703/node-xray#readme",
+  "bugs": {
+    "url": "https://github.com/bapibiswas703/node-xray/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -41,3 +49,4 @@
     "provenance": true
   }
 }
+

@@ -2,6 +2,14 @@
   "name": "@node-xray/nestjs",
   "version": "0.3.0",
   "description": "NestJS module for node-xray",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bapibiswas703/node-xray"
+  },
+  "homepage": "https://github.com/bapibiswas703/node-xray#readme",
+  "bugs": {
+    "url": "https://github.com/bapibiswas703/node-xray/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -61,3 +69,4 @@
     "provenance": true
   }
 }
+

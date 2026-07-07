@@ -2,6 +2,14 @@
   "name": "@node-xray/core",
   "version": "0.4.0",
   "description": "Core runtime engine for node-xray: async context, event store, loop monitor, WebSocket hub, redactor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bapibiswas703/node-xray"
+  },
+  "homepage": "https://github.com/bapibiswas703/node-xray#readme",
+  "bugs": {
+    "url": "https://github.com/bapibiswas703/node-xray/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -46,3 +54,4 @@
     "provenance": true
   }
 }
+
