@@ -1,6 +1,12 @@
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { Server as HttpServer, IncomingMessage } from 'node:http';
-import type { WireFrame, XRayEventName, XRayEventPayload, RequestRecord } from '@node-xray/types';
+import type {
+  WireFrame,
+  XRayEventName,
+  XRayEventPayload,
+  RequestRecord,
+  StatsPayload,
+} from '@node-xray/types';
 import { WIRE_VERSION } from '@node-xray/types';
 import { XRayWireError } from './errors.js';
 import { on, emit } from './events.js';
@@ -14,6 +20,8 @@ export interface HubOptions {
   store: RequestStore;
   getHelloConfig: () => HelloConfigData;
   getServerInfo: () => HelloServerData;
+  /** Invoked after a client `clear` frame empties the store. */
+  onClear?: () => void;
 }
 
 /** Internal payload of the `hello` frame. */
@@ -111,6 +119,7 @@ export function createHub(options: HubOptions): HubHandle {
               // empty snapshot to EVERY client so all open tabs (and
               // future reloads) agree the history is gone.
               options.store.clear();
+              options.onClear?.();
               broadcast({ v: WIRE_VERSION, t: 'snapshot', payload: options.store.list() });
             }
             // 'ping' needs no reply: receiving any frame proves the
@@ -129,6 +138,9 @@ export function createHub(options: HubOptions): HubHandle {
         });
 
         // Forward every internal event as the corresponding wire frame.
+        // The per-event payload type is a discriminated union; each
+        // `toFrame` branches on the event it subscribes to, so the
+        // `as` casts below are local and verified by the test suite.
         const events: Array<[XRayEventName, (p: XRayEventPayload[XRayEventName]) => WireFrame]> = [
           [
             'request:new',
@@ -158,6 +170,10 @@ export function createHub(options: HubOptions): HubHandle {
               t: 'error',
               payload: { message: (p as Error).message, code: 'XRAY_INTERNAL' },
             }),
+          ],
+          [
+            'stats',
+            (p) => ({ v: WIRE_VERSION, t: 'stats', payload: p as StatsPayload }),
           ],
         ];
         for (const [name, toFrame] of events) {

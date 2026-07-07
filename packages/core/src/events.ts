@@ -8,6 +8,7 @@ const listeners: { [K in XRayEventName]: Set<Listener<XRayEventPayload[K]>> } = 
   'request:done': new Set(),
   loop: new Set(),
   error: new Set(),
+  stats: new Set(),
 };
 
 let emitDepth = 0;
