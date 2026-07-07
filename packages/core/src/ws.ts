@@ -171,10 +171,7 @@ export function createHub(options: HubOptions): HubHandle {
               payload: { message: (p as Error).message, code: 'XRAY_INTERNAL' },
             }),
           ],
-          [
-            'stats',
-            (p) => ({ v: WIRE_VERSION, t: 'stats', payload: p as StatsPayload }),
-          ],
+          ['stats', (p) => ({ v: WIRE_VERSION, t: 'stats', payload: p as StatsPayload })],
         ];
         for (const [name, toFrame] of events) {
           unsubs.push(
