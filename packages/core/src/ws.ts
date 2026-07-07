@@ -96,6 +96,27 @@ export function createHub(options: HubOptions): HubHandle {
           socket.on('close', () => clients.delete(socket));
           socket.on('error', () => clients.delete(socket));
 
+          // Client-to-server frames. Malformed input is dropped, never
+          // thrown — a hostile or stale dashboard tab must not be able
+          // to surface errors in the host app.
+          socket.on('message', (raw) => {
+            let frame: ReturnType<typeof parseClientFrame>;
+            try {
+              frame = parseClientFrame(String(raw));
+            } catch {
+              return;
+            }
+            if (frame.type === 'clear') {
+              // Clear the server-side ring buffer, then push the now-
+              // empty snapshot to EVERY client so all open tabs (and
+              // future reloads) agree the history is gone.
+              options.store.clear();
+              broadcast({ v: WIRE_VERSION, t: 'snapshot', payload: options.store.list() });
+            }
+            // 'ping' needs no reply: receiving any frame proves the
+            // socket is alive, and ws answers protocol-level pings.
+          });
+
           send(socket, {
             v: WIRE_VERSION,
             t: 'hello',
@@ -165,13 +186,16 @@ export function createHub(options: HubOptions): HubHandle {
 }
 
 /**
- * Validate an incoming frame from a client. The v1 protocol is
- * client-to-server heartbeat only; the server does not accept any
- * client-initiated frames except the initial optional hello query.
+ * Validate an incoming frame from a client. The v1 protocol accepts
+ * exactly two client-initiated frames:
+ *
+ *  - `{ t: 'ping' }`  — heartbeat; no reply needed.
+ *  - `{ t: 'clear' }` — empty the server-side ring buffer. The server
+ *    answers with a fresh (empty) `snapshot` broadcast to all clients.
  *
  * Throws `XRayWireError` for malformed input.
  */
-export function parseClientFrame(raw: string): { type: 'ping' } {
+export function parseClientFrame(raw: string): { type: 'ping' | 'clear' } {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -183,6 +207,7 @@ export function parseClientFrame(raw: string): { type: 'ping' } {
   }
   const obj = value as Record<string, unknown>;
   if (obj['t'] === 'ping') return { type: 'ping' };
+  if (obj['t'] === 'clear') return { type: 'clear' };
   throw new XRayWireError(`unknown client frame type: ${String(obj['t'])}`);
 }
 

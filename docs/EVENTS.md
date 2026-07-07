@@ -160,6 +160,17 @@ interface RequestRecord {
 
 The dashboard is permissive: unknown fields are ignored, missing fields are filled with safe defaults. The server never assumes the client is up to date.
 
+## Client-to-server frames
+
+The v1 protocol accepts exactly two client-initiated frames; anything else is dropped silently (never an error back into the host app):
+
+| Frame                      | Effect                                                                                                                                                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ "v": 1, "t": "ping" }`  | Heartbeat. No reply — any received frame proves the socket is alive, and the `ws` library answers protocol-level pings itself.                                                                                                               |
+| `{ "v": 1, "t": "clear" }` | Empties the server-side ring buffer. The server answers with a fresh (empty) `snapshot` broadcast to **all** connected clients, so every open tab and any later reload agree the history is gone. The dashboard's "clear" button sends this. |
+
+The WebSocket upgrade is auth-gated (when `auth` is configured), so `clear` carries the same authorization as viewing the data.
+
 ## Writing a custom sink
 
 A "sink" is anything that subscribes to the event bus. The dashboard is a sink. You can write your own:
