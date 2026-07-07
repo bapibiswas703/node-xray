@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Core runtime engine for node-xray: async context, event store, loop monitor, WebSocket hub, redactor",
   "repository": {
     "type": "git",

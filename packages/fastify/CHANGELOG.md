@@ -1,5 +1,13 @@
 # @node-xray/fastify
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [6eaad78]
+  - @node-xray/core@0.5.0
+  - @node-xray/dashboard@0.2.3
+
 ## 0.3.0
 
 ### Minor Changes

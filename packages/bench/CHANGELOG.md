@@ -1,5 +1,11 @@
 # @node-xray/bench
 
+## 0.1.3
+
+### Patch Changes
+
+- @node-xray/express@0.3.1
+
 ## 0.1.2
 
 ### Patch Changes

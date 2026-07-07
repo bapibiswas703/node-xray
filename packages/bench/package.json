@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/bench",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "node-xray throughput / latency benchmark (excluded from publish)",
   "type": "module",
