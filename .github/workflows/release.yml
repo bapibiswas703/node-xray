@@ -55,6 +55,19 @@ jobs:
         # `env` must be a sibling of `uses`/`with` — nested inside
         # `with` it makes the workflow file invalid, and every run
         # fails at startup in 0s before any job appears.
+        # `changesets/action@v1` only checks `process.env.NPM_TOKEN`
+        # (see v1/src/index.ts — it does NOT fall back to
+        # `NODE_AUTH_TOKEN`). Without `NPM_TOKEN` it falls through to
+        # OIDC, which on this account still requires OTP because
+        # trusted publishing is not configured per-package on
+        # npmjs.com. The publish step then fails with EOTP.
+        # Setting both: the action writes NPM_TOKEN to ~/.npmrc,
+        # npm also accepts NODE_AUTH_TOKEN as a documented fallback.
+        # The secret must be a non-2FA token (a legacy Automation
+        # token, or a new Granular Access Token with
+        # "Bypass 2FA" enabled) — a 2FA-bound user token will still
+        # throw EOTP.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
