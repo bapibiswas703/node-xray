@@ -45,30 +45,38 @@ jobs:
       - name: Build
         run: pnpm -r build
 
-      - name: Create GitHub release (if version changed)
-        id: create_release
-        uses: changesets/action@v1
-        with:
-          version: pnpm version
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
-          publish: pnpm release
-        # `env` must be a sibling of `uses`/`with` — nested inside
-        # `with` it makes the workflow file invalid, and every run
-        # fails at startup in 0s before any job appears.
-        # `changesets/action@v1` only checks `process.env.NPM_TOKEN`
-        # (see v1/src/index.ts — it does NOT fall back to
-        # `NODE_AUTH_TOKEN`). Without `NPM_TOKEN` it falls through to
-        # OIDC, which on this account still requires OTP because
-        # trusted publishing is not configured per-package on
-        # npmjs.com. The publish step then fails with EOTP.
-        # Setting both: the action writes NPM_TOKEN to ~/.npmrc,
-        # npm also accepts NODE_AUTH_TOKEN as a documented fallback.
-        # The secret must be a non-2FA token (a legacy Automation
-        # token, or a new Granular Access Token with
-        # "Bypass 2FA" enabled) — a 2FA-bound user token will still
-        # throw EOTP.
+      - name: Consume changesets and commit version bump
+        id: version
+        run: |
+          # pnpm changeset version consumes .changeset/*.md, bumps
+          # package.json versions, and writes CHANGELOG entries.
+          pnpm changeset version
+
+          # If nothing changed (no .changeset/*.md files), skip the
+          # rest — no packages to publish.
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changesets to consume — nothing to publish."
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # Commit the version bump directly to main.  We do not
+          # create a separate PR — the version bump is a mechanical
+          # consequence of the merged changeset PR and does not
+          # need its own review cycle.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: version packages"
+          git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        if: steps.version.outputs.changed == 'true'
+        run: pnpm release
+        env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
