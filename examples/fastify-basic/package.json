@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/example-fastify-basic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Minimal Fastify + node-xray example",
   "license": "MIT",

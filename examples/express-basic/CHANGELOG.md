@@ -1,5 +1,16 @@
 # @node-xray/example-express-basic
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [88305f1]
+- Updated dependencies [d77d8d5]
+- Updated dependencies [52b70ca]
+  - @node-xray/core@0.4.0
+  - @node-xray/dashboard@0.2.2
+  - @node-xray/express@0.3.0
+
 ## 0.1.1
 
 ### Patch Changes

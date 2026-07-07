@@ -206,7 +206,7 @@ importers:
   packages/dashboard:
     dependencies:
       '@node-xray/core':
-        specifier: ^0.3.1
+        specifier: ^0.4.0
         version: link:../core
       '@node-xray/types':
         specifier: ^0.2.0
@@ -231,10 +231,10 @@ importers:
   packages/express:
     dependencies:
       '@node-xray/core':
-        specifier: ^0.3.1
+        specifier: ^0.4.0
         version: link:../core
       '@node-xray/dashboard':
-        specifier: ^0.2.0
+        specifier: ^0.2.2
         version: link:../dashboard
       '@node-xray/types':
         specifier: ^0.2.1
@@ -274,10 +274,10 @@ importers:
   packages/fastify:
     dependencies:
       '@node-xray/core':
-        specifier: ^0.3.1
+        specifier: ^0.4.0
         version: link:../core
       '@node-xray/dashboard':
-        specifier: ^0.2.0
+        specifier: ^0.2.2
         version: link:../dashboard
       '@node-xray/types':
         specifier: ^0.2.1
@@ -308,10 +308,10 @@ importers:
   packages/nestjs:
     dependencies:
       '@node-xray/core':
-        specifier: ^0.3.1
+        specifier: ^0.4.0
         version: link:../core
       '@node-xray/dashboard':
-        specifier: ^0.2.0
+        specifier: ^0.2.2
         version: link:../dashboard
       '@node-xray/types':
         specifier: ^0.2.1

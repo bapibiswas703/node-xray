@@ -1,5 +1,29 @@
 # @node-xray/core
 
+## 0.4.0
+
+### Minor Changes
+
+- 88305f1: Dashboard "clear" now clears the server-side ring buffer too — previously it only wiped the browser's copy, so reloading the page brought the whole history back from the snapshot. The client sends a `{ v: 1, t: 'clear' }` frame; the server empties the store and rebroadcasts an empty snapshot to every connected tab (documented in docs/EVENTS.md, covered by new WS contract tests). Malformed or unknown client frames are dropped without affecting the socket.
+
+  Dashboard layout polish: the page now fills the full browser viewport (an unsized `html`/`body` chain made the root collapse to its 600px min-height, leaving dead space below), the root's border-radius is removed, and the Runtime panels show muted placeholder hints ("select a request to inspect", "idle") instead of blank canvas when no request is selected.
+
+  Fix a long-standing dashboard crash: the reset path emptied `#loop-box`, deleting the Event Loop ring and labels from the DOM, so every `loop` frame (twice a second) threw `TypeError: Cannot set properties of null` in `renderLoop` and the Event Loop panel rendered as an empty rectangle. The loop box is no longer cleared (it is process telemetry, not per-request state) and `renderLoop` is null-safe.
+
+  Dashboard assets are now served with `cache-control: no-cache` in the Express and Fastify adapters (previously `max-age=3600`) — an hour-long browser cache kept stale, crashing bundles alive across dashboard updates until a hard refresh.
+
+- 52b70ca: Fix five critical defects found in an internal implementation audit:
+
+  - **Packaging**: tsup no longer inlines `@node-xray/core` into adapter dists (pnpm workspace symlinks defeated `skipNodeModulesBundle`, shipping a private copy of core and an undeclared `require('ws')` that crashed the published fastify/nestjs packages under pnpm). Workspace packages and `ws` are now externalized; `rxjs` is a declared NestJS peer dependency; packaging regression tests parse each dist and verify every bare require is declared.
+  - **AsyncLocalStorage context**: all three adapters now wrap downstream execution in the request context — `getContext()` works inside handlers (across `await` and timers), and `withTags()` tags persist onto the finished `RequestRecord` via the new `RECORD_TAGS_REF` accumulator.
+  - **Custom `path`**: the dashboard client derives its WebSocket endpoint from `location.pathname` instead of a hardcoded `/node-xray`, so custom mount paths (e.g. the examples' `/_xray`) get live data.
+  - **Auth**: the dashboard HTML and static assets served by the Express middleware, Fastify routes, and NestJS listener are now gated by the configured `auth` (401 + `WWW-Authenticate` for basic). Core gains `verifyDashboardAuth()` and a `serveHttp: false` mount option so exactly one writer owns each dashboard response.
+  - **`enabled: false`**: Express and Fastify adapters are true no-ops when disabled — no more per-request `onError` spam from the muted core.
+
+### Patch Changes
+
+- d77d8d5: Ignore Chrome DevTools' `/.well-known/appspecific/` probe requests by default — with DevTools open, Chrome fires one per page load and each showed up in the dashboard as a 404, polluting the request list and error count.
+
 ## 0.3.0
 
 ### Minor Changes

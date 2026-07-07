@@ -1,6 +1,6 @@
 {
   "name": "@node-xray/nestjs",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "NestJS module for node-xray",
   "license": "MIT",
   "type": "module",
@@ -30,8 +30,8 @@
     "clean": "rimraf dist .turbo .tsup *.tsbuildinfo"
   },
   "dependencies": {
-    "@node-xray/core": "^0.3.1",
-    "@node-xray/dashboard": "^0.2.0",
+    "@node-xray/core": "^0.4.0",
+    "@node-xray/dashboard": "^0.2.2",
     "@node-xray/types": "^0.2.1"
   },
   "devDependencies": {
