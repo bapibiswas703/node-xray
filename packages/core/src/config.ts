@@ -113,6 +113,9 @@ const DEFAULT_REDACT_BODY_PATHS: readonly string[] = [
 
 const DEFAULT_IGNORE = (ctx: { path: string; method: string }): boolean => {
   if (ctx.path === '/favicon.ico') return true;
+  // Chrome probes this on every page load with DevTools; without the
+  // ignore it floods the dashboard with 404 noise.
+  if (ctx.path.startsWith('/.well-known/appspecific/')) return true;
   if (ctx.path.endsWith('/node-xray') || ctx.path.startsWith('/node-xray/')) return true;
   return false;
 };

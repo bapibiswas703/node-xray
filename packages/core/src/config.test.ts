@@ -199,4 +199,17 @@ describe('resolveOptions', () => {
     const r = resolveOptions({ ignore });
     expect(r.ignore).toBe(ignore);
   });
+
+  it('default ignore skips favicon, dashboard paths, and Chrome DevTools probes', () => {
+    const { ignore } = resolveOptions({});
+    expect(ignore({ path: '/favicon.ico', method: 'get' })).toBe(true);
+    expect(ignore({ path: '/node-xray', method: 'get' })).toBe(true);
+    expect(ignore({ path: '/node-xray/app.js', method: 'get' })).toBe(true);
+    // Chrome requests this on page load with DevTools open; it must
+    // not flood the dashboard with 404 noise.
+    expect(
+      ignore({ path: '/.well-known/appspecific/com.chrome.devtools.json', method: 'get' }),
+    ).toBe(true);
+    expect(ignore({ path: '/api/users', method: 'get' })).toBe(false);
+  });
 });
