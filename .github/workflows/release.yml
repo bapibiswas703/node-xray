@@ -52,6 +52,9 @@ jobs:
           commit: 'chore: version packages'
           title: 'chore: version packages'
           publish: pnpm release
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # `env` must be a sibling of `uses`/`with` — nested inside
+        # `with` it makes the workflow file invalid, and every run
+        # fails at startup in 0s before any job appears.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
