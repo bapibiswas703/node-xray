@@ -277,7 +277,10 @@ export function xrayPlugin(options: XRayFastifyOptions = {}): XRayFastifyPlugin 
               return;
             }
             await reply
-              .header('cache-control', 'public, max-age=3600')
+              // Dev tool: never let the browser hold a stale bundle
+              // (a 1h cache left old, crashing dashboards live until
+              // a hard refresh).
+              .header('cache-control', 'no-cache')
               .type(asset.mime)
               .send(asset.body);
           });

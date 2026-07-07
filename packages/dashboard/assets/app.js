@@ -410,15 +410,28 @@
         'thread-sub',
         'thread-lbl',
         'tl-hdr',
-        'lp-name',
-        'lp-sub',
-        'loop-box',
+        // NOTE: 'loop-box' / 'lp-name' / 'lp-sub' must NOT be in this
+        // list. The Event Loop box is process-level telemetry, not
+        // per-request state — and `empty('loop-box')` used to strip
+        // #loop-ring/#lp-name/#lp-sub out of the DOM, making every
+        // subsequent `loop` frame crash renderLoop on a null node.
         'req-size',
         'res-size',
       ].forEach((id) => {
         const n = $(id);
         if (n) empty(n);
       });
+      // Muted hints so the un-selected state reads as "waiting", not
+      // broken. Cleared by renderRuntime when a request is selected.
+      const hint = (id, text) => {
+        const n = $(id);
+        if (n) n.appendChild(el('div', { class: 'q-empty' }, text));
+      };
+      hint('stack-panel', 'select a request to inspect');
+      hint('tq-body', 'idle');
+      hint('mq-body', 'idle');
+      hint('waterfall', 'select a request to see its async waterfall');
+      hint('async-grid', 'no async operations recorded');
       return;
     }
     renderRuntime(rec);
@@ -724,28 +737,42 @@
       idle: '#64748b',
     };
     const c = phaseColors[phase] || '#22d3ee';
-    $('lp-name').textContent = phase;
-    $('lp-name').style.color = c;
-    $('lp-sub').textContent =
-      phase === 'poll'
-        ? 'I/O wait'
-        : phase === 'timers'
-          ? 'running timer callbacks'
-          : phase === 'check'
-            ? 'setImmediate callbacks'
-            : phase === 'close'
-              ? 'closing handles'
-              : phase === 'pending'
-                ? 'I/O callbacks'
-                : phase === 'idle'
-                  ? 'idle'
-                  : 'awaiting telemetry';
-    $('loop-ring').style.borderColor = c;
-    const ringSpin = $('loop-ring').querySelector('.ring-spin');
-    if (ringSpin) ringSpin.style.color = c;
-    $('loop-box').style.borderColor = c;
-    $('st-lag').textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
-    $('llg').textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
+    // Null-safe: a missing node must never throw — loop frames arrive
+    // twice a second and an exception here kills live telemetry.
+    const lpName = $('lp-name');
+    if (lpName) {
+      lpName.textContent = phase;
+      lpName.style.color = c;
+    }
+    const lpSub = $('lp-sub');
+    if (lpSub) {
+      lpSub.textContent =
+        phase === 'poll'
+          ? 'I/O wait'
+          : phase === 'timers'
+            ? 'running timer callbacks'
+            : phase === 'check'
+              ? 'setImmediate callbacks'
+              : phase === 'close'
+                ? 'closing handles'
+                : phase === 'pending'
+                  ? 'I/O callbacks'
+                  : phase === 'idle'
+                    ? 'idle'
+                    : 'awaiting telemetry';
+    }
+    const ring = $('loop-ring');
+    if (ring) {
+      ring.style.borderColor = c;
+      const ringSpin = ring.querySelector('.ring-spin');
+      if (ringSpin) ringSpin.style.color = c;
+    }
+    const box = $('loop-box');
+    if (box) box.style.borderColor = c;
+    const stLag = $('st-lag');
+    if (stLag) stLag.textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
+    const llg = $('llg');
+    if (llg) llg.textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
   }
 
   // ── controls ──────────────────────────────────────────────────────
@@ -779,6 +806,12 @@
       renderSidebar();
       renderSelected();
       renderStats();
+      // Also clear the server-side ring buffer — otherwise a reload
+      // replays the old history from the snapshot. The server answers
+      // with an empty snapshot broadcast to every connected tab.
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ v: 1, t: 'clear' }));
+      }
     });
     document.querySelectorAll('.headers-toggle').forEach((b) => {
       b.addEventListener('click', () => {

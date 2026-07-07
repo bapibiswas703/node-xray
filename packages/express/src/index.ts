@@ -323,7 +323,10 @@ export function xray(options: XRayOptions = {}): XRayExpressHandle {
         if (asset !== null) {
           res.statusCode = 200;
           res.setHeader('content-type', asset.mime);
-          res.setHeader('cache-control', 'public, max-age=3600');
+          // Dev tool: never let the browser hold a stale bundle. An
+          // hour-long cache meant every dashboard update kept crashing
+          // in already-open browsers until a hard refresh.
+          res.setHeader('cache-control', 'no-cache');
           res.end(asset.body);
         } else {
           res.statusCode = 404;

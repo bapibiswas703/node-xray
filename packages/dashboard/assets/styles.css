@@ -1,6 +1,6 @@
 /* node-xray dashboard v1.0
  *
- * Ported from the v4.1 mockup (docs/node_xray_dashboard_v4_1 - Copy.html).
+ * Ported from the v4.1 mockup (docs/node_xray_dashboard_v4_1.html).
  * Dark theme with cyan / violet accents. No external fonts; uses the
  * system monospace stack so the dashboard renders identically across
  * platforms and offline.
@@ -12,10 +12,19 @@
   padding: 0;
 }
 
+/* The dashboard root sizes itself with `height: 100%`, which computes
+ * against the body — without an explicit chain the root collapses to
+ * its min-height and leaves dead canvas below (the page background)
+ * on tall viewports. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
 .xr {
   font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   font-size: 12px;
-  border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
