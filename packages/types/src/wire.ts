@@ -107,7 +107,13 @@ export interface StatsPayload {
  * Discriminated union of every event the internal bus can emit. Used
  * by the WS hub and by custom sinks.
  */
-export type XRayEventName = 'request:new' | 'request:update' | 'request:done' | 'loop' | 'error' | 'stats';
+export type XRayEventName =
+  | 'request:new'
+  | 'request:update'
+  | 'request:done'
+  | 'loop'
+  | 'error'
+  | 'stats';
 
 export type XRayEventPayload = {
   'request:new': RequestRecord;

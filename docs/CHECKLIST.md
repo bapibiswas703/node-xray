@@ -103,11 +103,11 @@ Legend: `[x]` done & verified · `[ ]` open. Every open box lists its acceptance
 
 ## Score math
 
-| Area                                                                | Weight | Status                                             |
-| ------------------------------------------------------------------- | ------ | -------------------------------------------------- |
-| Capture, context, storage, protocol, security, isolation, packaging | 7      | **Earned** — implemented, tested, runtime-verified |
+| Area                                                                | Weight | Status                                                                                           |
+| ------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| Capture, context, storage, protocol, security, isolation, packaging | 7      | **Earned** — implemented, tested, runtime-verified                                               |
 | Telemetry producers (§2) + dead-UI removal                          | 1.5    | Partial — `stats` frame + `UV_THREADPOOL_SIZE` landed; timeline/async ops/waterfall/phase remain |
-| Options/doc honesty (§1 tail, §9) + small fixes (§3, §5, §6 tails)  | 1      | Open — mostly small, high-value                    |
-| Release fully hands-free (§8) + CI E2E (§7, §10 tails)              | 0.5    | Mostly earned — npm publish unblocked; CI E2E and consumer-install E2E still open |
+| Options/doc honesty (§1 tail, §9) + small fixes (§3, §5, §6 tails)  | 1      | Open — mostly small, high-value                                                                  |
+| Release fully hands-free (§8) + CI E2E (§7, §10 tails)              | 0.5    | Mostly earned — npm publish unblocked; CI E2E and consumer-install E2E still open                |
 
 **7.5 / 10 today → 10 / 10 when every open box above is checked.** Rule of the road: a box never gets checked by "the code exists" — only by the stated acceptance criterion passing at runtime or in CI.
