@@ -7,6 +7,7 @@ import type {
   SerializedError,
   SnapshotSide,
   LoopStats,
+  StatsPayload,
 } from '@node-xray/types';
 import { XRayConfigError } from './errors.js';
 import { resolveOptions, type ResolvedOptions } from './config.js';
@@ -16,6 +17,8 @@ import { redactHeaders, redactSnapshot } from './redact.js';
 import { RequestStore, createPartialRecord, appendTimeline, appendAsyncOp } from './store.js';
 import { createHub } from './ws.js';
 import { mountDashboard } from './dashboard.js';
+import { createStatsEmitter } from './stats.js';
+import { emit } from './events.js';
 
 export interface Core {
   /** The resolved options (read-only snapshot). */
@@ -53,6 +56,8 @@ export interface CoreInternals {
   loopPhase(): LoopStats['phase'];
   /** Increment / decrement the in-flight thread-pool counter (advisory). */
   threadMark(busy: boolean): void;
+  /** Read a fresh aggregate snapshot. Used by the stats emitter and tests. */
+  snapshotStats(): StatsPayload;
 }
 
 export interface StartRequestInput {
@@ -88,6 +93,7 @@ export function createCore(options: XRayOptions = {}): Core {
 
   const store = new RequestStore({ maxRequests: resolved.maxRequests });
   const monitor = startLoopMonitor();
+  let threadBusy = 0;
   const hub = createHub({
     path: resolved.path,
     maxClients: resolved.websocket.maxClients,
@@ -105,9 +111,18 @@ export function createCore(options: XRayOptions = {}): Core {
       framework: 'node-xray',
       version: '0.2.0',
     }),
+    onClear: () => {
+      stats.reset();
+    },
   });
-
-  let threadBusy = 0;
+  const stats = createStatsEmitter({
+    monitor,
+    getThreadBusy: () => threadBusy,
+    getDropped: () => hub.droppedCount(),
+    onStats: (payload) => {
+      emit('stats', payload);
+    },
+  });
 
   const internals: CoreInternals = {
     startRequest(input) {
@@ -135,6 +150,7 @@ export function createCore(options: XRayOptions = {}): Core {
           : {}),
       };
       store.add(record);
+      stats.noteStartRequest();
       return record;
     },
     addTimeline(record, entry) {
@@ -168,6 +184,7 @@ export function createCore(options: XRayOptions = {}): Core {
         ...(input.stack ? { stack: input.stack } : {}),
         loop: { lagMs: monitor.latest().lagMs, phase: currentEventLoopPhase() },
       };
+      stats.noteFinishRequest({ status: input.status, durationMs: input.durationMs });
       store.finish(final);
       return final;
     },
@@ -177,6 +194,7 @@ export function createCore(options: XRayOptions = {}): Core {
     threadMark(busy) {
       threadBusy = Math.max(0, threadBusy + (busy ? 1 : -1));
     },
+    snapshotStats: () => stats.latest(),
   };
 
   let mounted = false;
@@ -197,6 +215,7 @@ export function createCore(options: XRayOptions = {}): Core {
       });
     },
     async close() {
+      stats.stop();
       monitor.stop();
       await hub.close();
     },
@@ -240,6 +259,15 @@ function mutedCore(options: ResolvedOptions): Core {
       threadMark: () => {
         /* no-op */
       },
+      snapshotStats: () => ({
+        reqCount: 0,
+        errors: 0,
+        avgMs: 0,
+        loopLagP99: 0,
+        poolBusy: 0,
+        poolSize: 0,
+        backpressureDropped: 0,
+      }),
     },
   };
 }

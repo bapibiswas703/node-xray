@@ -1,11 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server as HttpServer } from 'node:http';
 import { createServer, request as httpRequest } from 'node:http';
 import { createCore } from './core.js';
-import { _clearAllForTest } from './events.js';
+import { _clearAllForTest, on } from './events.js';
+import type { StatsPayload } from '@node-xray/types';
 
 afterEach(() => {
   _clearAllForTest();
@@ -308,5 +309,97 @@ describe('createCore', () => {
       expect((errors[0] as Error).message).toBe('boom');
       await core.close();
     });
+  });
+});
+
+describe('stats integration', () => {
+  it('emits a stats event with cumulative counters driven by startRequest/finishRequest', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: StatsPayload[] = [];
+      const core = createCore({ path: '/x' });
+      const off = on('stats', (p) => {
+        seen.push(p);
+      });
+      try {
+        for (let i = 0; i < 5; i++) {
+          const r = core.internals.startRequest({
+            id: `r${i}`,
+            method: 'GET',
+            path: '/api',
+            framework: 'custom',
+            request: { headers: {} },
+          });
+          core.internals.finishRequest({
+            record: r,
+            status: i < 4 ? 200 : 500,
+            response: { headers: {} },
+            durationMs: 10 + i,
+          });
+        }
+        vi.advanceTimersByTime(500);
+        expect(seen.length).toBeGreaterThanOrEqual(1);
+        const first = seen[0];
+        expect(first.reqCount).toBe(5);
+        expect(first.errors).toBe(1);
+        expect(first.avgMs).toBeGreaterThan(0);
+        expect(first.poolSize).toBeGreaterThanOrEqual(1);
+        expect(first.poolBusy).toBe(0);
+      } finally {
+        off();
+        await core.close();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('threadMark and the dropped count appear in the payload', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: StatsPayload[] = [];
+      const core = createCore({ path: '/x' });
+      const off = on('stats', (p) => {
+        seen.push(p);
+      });
+      try {
+        core.internals.threadMark(true);
+        core.internals.threadMark(true);
+        vi.advanceTimersByTime(500);
+        expect(seen.length).toBeGreaterThanOrEqual(1);
+        expect(seen[0].poolBusy).toBe(2);
+        core.internals.threadMark(false);
+        vi.advanceTimersByTime(500);
+        expect(seen[seen.length - 1].poolBusy).toBe(1);
+      } finally {
+        off();
+        await core.close();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('snapshotStats() returns a fresh sample synchronously', async () => {
+    const core = createCore({ path: '/x' });
+    const r = core.internals.startRequest({
+      id: 'r1',
+      method: 'GET',
+      path: '/api',
+      framework: 'custom',
+      request: { headers: {} },
+    });
+    core.internals.finishRequest({
+      record: r,
+      status: 200,
+      response: { headers: {} },
+      durationMs: 5,
+    });
+    const snap = core.internals.snapshotStats();
+    expect(snap.reqCount).toBe(1);
+    expect(snap.errors).toBe(0);
+    expect(snap.avgMs).toBe(5);
+    expect(snap.poolSize).toBeGreaterThanOrEqual(1);
+    await core.close();
   });
 });

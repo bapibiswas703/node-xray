@@ -4,7 +4,8 @@ import WebSocket from 'ws';
 import { createHub, parseClientFrame, type HubHandle } from './ws.js';
 import { RequestStore, createPartialRecord } from './store.js';
 import { XRayWireError } from './errors.js';
-import type { WireFrame } from '@node-xray/types';
+import { emit } from './events.js';
+import type { WireFrame, StatsPayload } from '@node-xray/types';
 
 describe('parseClientFrame', () => {
   it('accepts ping', () => {
@@ -141,6 +142,89 @@ describe('hub client frames (contract)', () => {
     await new Promise((r) => setTimeout(r, 150));
     expect(store.size).toBe(0);
 
+    ws.close();
+  });
+
+  it('forwards stats events to every connected client as a `stats` frame', async () => {
+    const store = new RequestStore({ maxRequests: 10 });
+    const port = await boot(store);
+
+    const framesA: WireFrame[] = [];
+    const framesB: WireFrame[] = [];
+    const open = (sink: WireFrame[]): Promise<WebSocket> =>
+      new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/node-xray/ws`);
+        ws.on('message', (d) => sink.push(JSON.parse(String(d)) as WireFrame));
+        ws.on('open', () => resolve(ws));
+        ws.on('error', reject);
+      });
+    const a = await open(framesA);
+    const b = await open(framesB);
+    await new Promise((r) => setTimeout(r, 100));
+
+    const sample: StatsPayload = {
+      reqCount: 7,
+      errors: 1,
+      avgMs: 12,
+      loopLagP99: 0.4,
+      poolBusy: 0,
+      poolSize: 4,
+      backpressureDropped: 0,
+    };
+    emit('stats', sample);
+    await new Promise((r) => setTimeout(r, 100));
+
+    const lastA = framesA.filter((f) => f.t === 'stats').pop();
+    const lastB = framesB.filter((f) => f.t === 'stats').pop();
+    expect(lastA?.payload).toEqual(sample);
+    expect(lastB?.payload).toEqual(sample);
+
+    a.close();
+    b.close();
+  });
+
+  it('invokes onClear after store.clear() so callers can reset side state', async () => {
+    const store = new RequestStore({ maxRequests: 10 });
+    store.add(record('a'));
+    let clearFires = 0;
+    await new Promise<void>((resolve) => {
+      hub = createHub({
+        path: '/node-xray',
+        maxClients: 4,
+        store,
+        onClear: () => {
+          clearFires++;
+        },
+        getHelloConfig: () => ({
+          path: '/node-xray',
+          maxRequests: 10,
+          captureRequestBody: true,
+          captureResponseBody: true,
+        }),
+        getServerInfo: () => ({
+          node: process.version,
+          pid: process.pid,
+          uptime: 0,
+          framework: 'test',
+          version: '0.0.0',
+        }),
+      });
+      server = createServer((_req, res) => res.end('ok'));
+      hub.attach(server);
+      server!.listen(0, '127.0.0.1', () => resolve());
+    });
+    const port = (server!.address() as { port: number }).port;
+
+    const ws = await new Promise<WebSocket>((resolve, reject) => {
+      const s = new WebSocket(`ws://127.0.0.1:${port}/node-xray/ws`);
+      s.on('open', () => resolve(s));
+      s.on('error', reject);
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    ws.send(JSON.stringify({ v: 1, t: 'clear' }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(clearFires).toBe(1);
+    expect(store.size).toBe(0);
     ws.close();
   });
 });

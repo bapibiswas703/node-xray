@@ -121,6 +121,18 @@
     live: true,
     pendingUpdates: new Map(), // id -> patch (flushed on tick)
     loop: { lagMs: 0, p50: 0, p99: 0, max: 0, utilization: 0, phase: 'unknown', sampledAt: 0 },
+    // Server-aggregated stats, refreshed every 500 ms via the
+    // `stats` wire frame. Zeroes here mean "server has not sent
+    // a stats frame yet" (typically the first 500 ms after connect).
+    stats: {
+      reqCount: 0,
+      errors: 0,
+      avgMs: 0,
+      loopLagP99: 0,
+      poolBusy: 0,
+      poolSize: 0,
+      backpressureDropped: 0,
+    },
     server: { node: '', pid: 0, uptime: 0, framework: '', version: '' },
     config: { path, maxRequests: 0, captureRequestBody: false, captureResponseBody: false },
     connected: false,
@@ -250,6 +262,14 @@
         renderLoop();
         break;
       }
+      case 'stats': {
+        // Server-aggregated stats (pushed every 500 ms). Drives the
+        // global status bar; the per-record sidebar aggregation in
+        // renderStats is independent and still reads from state.records.
+        state.stats = frame.payload || state.stats;
+        renderStatusBar();
+        break;
+      }
       case 'error': {
         // Surface to console only; v1 has no global toast.
         // eslint-disable-next-line no-console
@@ -334,39 +354,35 @@
   }
 
   // ── stats ─────────────────────────────────────────────────────────
-  function renderStats() {
-    const recs = Array.from(state.records.values());
-    const total = recs.length;
-    const ok = recs.filter((r) => r.status >= 200 && r.status < 300).length;
-    const err = recs.filter((r) => r.status >= 400).length;
-    const done = recs.filter((r) => r.durationMs != null);
-    const avg = done.length ? done.reduce((s, r) => s + (r.durationMs || 0), 0) / done.length : 0;
+  // The global status bar reads from the server-aggregated `stats`
+  // frame (state.stats). The server reports cumulative counters since
+  // process start (or last `clear`), so the values are no longer
+  // bounded by `maxRequests` and the pool tile shows the real
+  // `poolBusy/poolSize` instead of `0/0` for apps that never
+  // populated `record.thread`. Per-record counts in the sidebar still
+  // come from `state.records` (unchanged).
+  function renderStatusBar() {
+    const s = state.stats || {};
+    const total = s.reqCount || 0;
+    const ok = Math.max(0, total - (s.errors || 0));
+    const err = s.errors || 0;
+    const avg = s.avgMs || 0;
+    const pool = (s.poolBusy || 0) + '/' + (s.poolSize || 4);
     $('rc').textContent = String(total);
-    $('avgms').textContent = done.length ? Math.round(avg) + 'ms' : '—';
+    $('avgms').textContent = total ? Math.round(avg) + 'ms' : '—';
     $('st-tot').textContent = String(total);
     $('st-ok').textContent = String(ok);
     $('st-err').textContent = String(err);
-    $('st-avg').textContent = done.length ? Math.round(avg) + 'ms' : '—';
-    $('st-lag').textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
-    $('llg').textContent = (state.loop.lagMs || 0).toFixed(1) + 'ms';
-    $('st-pool').textContent =
-      state.records.values().next().value && state.records.values().next().value.thread
-        ? state.records.values().next().value.thread.busy +
-          '/' +
-          state.records.values().next().value.thread.size
-        : '0/0';
-    const busy = (() => {
-      let maxBusy = 0,
-        maxSize = 0;
-      for (const r of recs) {
-        if (r.thread) {
-          maxBusy = Math.max(maxBusy, r.thread.busy);
-          maxSize = Math.max(maxSize, r.thread.size);
-        }
-      }
-      return maxSize > 0 ? maxBusy + '/' + maxSize : '0/0';
-    })();
-    $('st-pool').textContent = busy;
+    $('st-avg').textContent = total ? Math.round(avg) + 'ms' : '—';
+    $('st-lag').textContent = (s.loopLagP99 || 0).toFixed(1) + 'ms';
+    $('llg').textContent = (s.loopLagP99 || 0).toFixed(1) + 'ms';
+    $('st-pool').textContent = pool;
+    $('st-drop').textContent = String(s.backpressureDropped || 0);
+  }
+  // Kept as a stable name for callers; now an alias for the
+  // server-driven status bar.
+  function renderStats() {
+    renderStatusBar();
   }
 
   // ── selected request ──────────────────────────────────────────────
